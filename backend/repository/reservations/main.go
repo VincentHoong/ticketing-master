@@ -51,7 +51,7 @@ type IReservationRepository interface {
 	GetTotalReserved(ctx context.Context, eventId string) (int64, error)
 	BlockEvent(ctx context.Context, eventId string) (evicted bool)
 	UnblockEvent(ctx context.Context, eventId string) (evicted bool)
-	IsBlockEvent(ctx context.Context, eventId string) bool
+	IsBlockEvent(ctx context.Context, eventId string) (evicted bool)
 	ClearBlockedEvents()
 }
 
@@ -192,7 +192,7 @@ func (r *ReservationRepository) UnblockEvent(ctx context.Context, eventId string
 	return r.LRURepository.UnblockEvent(ctx, eventId)
 }
 
-func (r *ReservationRepository) IsBlockEvent(ctx context.Context, eventId string) bool {
+func (r *ReservationRepository) IsBlockEvent(ctx context.Context, eventId string) (evicted bool) {
 	return r.LRURepository.IsBlockEvent(ctx, eventId)
 }
 

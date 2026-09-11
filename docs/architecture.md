@@ -60,7 +60,7 @@ COMMIT;
 
 `FOR UPDATE` on the **event** row is the serialization point. Concurrent reservers for one event queue on that row; reservers for different events never contend. The sum and the insert are inside the same transaction as the lock, so no one can read a stale total and write past capacity.
 
-This is pessimistic locking. It was chosen over the optimistic `UPDATE ... WHERE status='available'` loop because seats here are a *count*, not individually-tracked rows — there is no per-seat row to compare-and-swap, and a retry loop against an aggregate degrades badly exactly when contention is highest.
+This is pessimistic locking. [Choosing a contention strategy](#choosing-a-contention-strategy) below argues it against the alternatives.
 
 ### Why `isCapped` is separate from the error
 
@@ -70,6 +70,74 @@ This is pessimistic locking. It was chosen over the optimistic `UPDATE ... WHERE
 - Post-**commit** it is `dbActiveReserved + quantity >= dbCapacity`, because only after a durable commit can you claim the seats are actually taken.
 
 Computing it post-commit rather than pre-insert matters: a rolled-back transaction must not mark an event sold out.
+
+---
+
+## Choosing a contention strategy
+
+Three standard approaches to resolving contention on a scarce resource. The one that fits depends on a single question: **is the contended thing a named resource, or a count?**
+
+| | models | fits here? |
+|---|---|---|
+| Optimistic CAS | one row per seat | no — capacity is a count |
+| Redis lock per seat | a mutex, one winner per name | no — needs a semaphore |
+| Log serialization (Kafka) | strict order, async resolution | partly — moves the async boundary to the wrong place |
+
+### Optimistic concurrency
+
+```sql
+UPDATE seats SET status='held' WHERE id=? AND status='available';  -- retry on rowCount 0
+```
+
+This assumes **per-seat rows**. Capacity here is `events.capacity` against a `SUM(quantity)` of active reservations, so there is no seat row to compare and swap.
+
+The aggregate version does exist and would be faster than the row lock:
+
+```sql
+UPDATE events SET reserved = reserved + $1
+ WHERE id = $2 AND reserved + $1 <= capacity;   -- rowCount 0 means full
+```
+
+One atomic statement, no explicit lock, no `SUM`. It was not taken because `reserved` is **denormalised state that can drift**: expiry, release and the sweeper all have to keep it in step with the reservation rows, and a bug in any of them silently corrupts capacity in a system whose entire claim is that capacity is never exceeded. The `SUM` is derived truth — it cannot drift, because there is nothing for it to drift from.
+
+That is a real trade-off, paid in throughput. The measurements say the price is low: a 3.12ms reserve p50 with 20,000 users contending for 1,000 seats.
+
+Note also that optimistic concurrency does not deadlock — it **livelocks**. Under heavy contention it burns work on transactions that fail their `rowCount` check and retry, spending the most effort at exactly the moment capacity is scarcest. Pessimistic locking does not make requests succeed (19,000 of 20,000 still fail); it makes each outcome get **decided once** instead of discovered after N wasted attempts.
+
+### A short-lived Redis lock
+
+```
+SET seat:123 held EX 300 NX
+```
+
+`NX` is a **mutex** — one winner per named resource, which models *many requests, one seat*. The contended resource here is a pool of N interchangeable seats: that is a **semaphore**, and `NX` cannot express it. The primitive would have to be `DECR` against a floor.
+
+Which lands on the problem the approach carries anyway: once Redis holds the authoritative count, any failure between the `DECR` and the Postgres insert either loses a seat or oversells, and reconciliation becomes mandatory. `EX 300` compounds it — a holder that stalls past its TTL leaves two clients believing they hold the same claim.
+
+Redis *is* used here, for what it is good at. It governs **who may attempt**: queue order, admission gate, liveness. Postgres governs **who succeeds**. The split follows durability requirements — losing Redis costs fairness and ordering, which is recoverable; losing Postgres costs correctness, which is not. Flushing Redis mid-run cannot cause an oversell; it only discards the queue.
+
+### Queue-based serialization
+
+Pushing every reservation attempt through one Kafka partition per event gives strict ordering and needs no locking — contention resolved by architecture. The cost is that **resolution becomes asynchronous**, and the user still has to be told whether they got tickets:
+
+- **Block the handler** on a correlation id until a consumer publishes the result. This rebuilds request/response on a system designed not to do it, and latency becomes partition lag.
+- **`202 Accepted` + polling.** Honest about the asynchrony, but needs a result store keyed by request id with a TTL.
+- **Push over SSE/WebSocket.** Best experience, most moving parts.
+
+There is also a scaling consequence: ordering is per-partition, so one partition per event means one consumer resolving that event. The property that provides ordering is the same one that prevents parallelism, and a hot event cannot be scaled out.
+
+### What this system does instead
+
+The virtual queue already resolves contention by architecture — it simply puts the asynchronous boundary in a different place:
+
+| | admission | resolution |
+|---|---|---|
+| this design | asynchronous — queue and poll | **synchronous**, ~3ms |
+| log-based | asynchronous — the log | **asynchronous**, needs a notification channel |
+
+Both are queue-based and both deliver ordering: the ZSET is scored by enqueue time, so admission is first-come-first-served rather than whoever's packet arrived first. The difference is *when* the user waits. This design makes them wait at admission, where waiting is expected and "you are in a queue" is a natural thing to render. The log approach makes them wait after committing, staring at a spinner asking whether they got tickets.
+
+So the log-based strategy is not missing so much as **relocated**: contention is resolved by architecture at the admission layer, and resolution is kept synchronous because that is the moment a user needs an answer.
 
 ---
 
@@ -289,6 +357,6 @@ Everything else converges on the green node. A branch that returns without passi
 
 ---
 
-## Not built
+## Worth building next
 
-- **A second contention strategy.** This implements pessimistic row locking plus Redis admission control, and benchmarks it across admission settings and transports. Serializing each event's reservations through a single log partition (Kafka) would resolve contention by architecture rather than by locking — no lock, one consumer, strict order. Benchmarking that against the row lock is the most interesting piece still missing, because the two fail in different ways: the row lock degrades with contention, the log degrades with partition throughput.
+- **A head-to-head benchmark against a log-based resolver.** [Choosing a contention strategy](#choosing-a-contention-strategy) argues why the async boundary sits at admission rather than at resolution, but the argument is reasoned, not measured. The two degrade differently — the row lock with contention, a single-partition consumer with throughput — and finding where those curves cross would turn a design position into a result. The load generator already produces the numbers that comparison needs.

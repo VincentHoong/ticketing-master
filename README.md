@@ -100,6 +100,8 @@ Three mechanisms, each with a distinct job:
 
 The subtle part is that rejecting fast must not stall the queue: a rejected user still holds an admission slot, so every terminal path releases it and promotes the next user. Missing that turned a 6-second run into a 302-second one during development.
 
+Why a row lock rather than optimistic CAS, a Redis seat lock, or a Kafka partition per event — and why the asynchronous boundary sits at admission rather than at resolution: **[Choosing a contention strategy](docs/architecture.md#choosing-a-contention-strategy)**.
+
 Detail, including the Lua scripts and why each key exists: **[docs/architecture.md](docs/architecture.md)**.
 
 ---
@@ -124,7 +126,7 @@ docs/             architecture, load testing, API reference
 
 | doc | what's in it |
 |---|---|
-| [docs/architecture.md](docs/architecture.md) | Schema, the oversell invariant, virtual queue internals, failure modes found and fixed |
+| [docs/architecture.md](docs/architecture.md) | Schema, the oversell invariant, why this contention strategy over the alternatives, virtual queue internals, failure modes found and fixed |
 | [docs/load-testing.md](docs/load-testing.md) | How to run load tests, both transports, every measurement, the poll-storm result |
 | [docs/api.md](docs/api.md) | Endpoint reference including the demo-only `/admin` routes |
 
