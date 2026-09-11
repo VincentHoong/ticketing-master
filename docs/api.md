@@ -211,7 +211,7 @@ Max 20,000.
 
 Every scope flushes Redis and clears the sold-out markers. Use `users` for routine cleanup: each simulation mints a throwaway user per simulated user, so they accumulate fast.
 
-> No active-run guard — calling this mid-simulation truncates tables underneath it.
+> Rejects with `409` if any simulation is active — same guard `/admin/simulate` uses to protect its own run.
 
 ### `POST /admin/simulate` → `202`
 

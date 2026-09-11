@@ -164,7 +164,7 @@ inproc   47 transactions    19,521 rows returned
 http    634 transactions   101,123 rows returned      13.5× / 5.2×
 ```
 
-Every poll over HTTP is a `SELECT` on `users`. This is the highest-leverage remaining fix.
+Every poll over HTTP is a `SELECT` on `users`. This was the highest-leverage remaining fix at the time; `GetUser` is now cache-aside against that same Redis user cache, so this measurement has not been rerun since.
 
 ---
 

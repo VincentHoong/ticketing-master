@@ -14,6 +14,7 @@ import (
 var ErrRefreshEventStatusInProgress = errors.New("refresh event status in progress")
 var marginTTL = 5 * time.Second
 var reservationItemTTL = 1 * time.Minute
+var eventBlockedTTL = 5 * time.Minute
 
 type RemoteCacheReservationRepository struct {
 	Rdb *redis.Client
@@ -82,4 +83,25 @@ func (r *RemoteCacheReservationRepository) GetReservationByIdempotencyKey(ctx co
 	}
 
 	return &reservationItem, nil
+}
+
+func getEventBlockedKey(eventId string) string {
+	return `reservation:event:{` + eventId + `}:blocked`
+}
+
+func (r *RemoteCacheReservationRepository) BlockEvent(ctx context.Context, eventId string) error {
+	return r.Rdb.Set(ctx, getEventBlockedKey(eventId), "1", eventBlockedTTL).Err()
+}
+
+func (r *RemoteCacheReservationRepository) UnblockEvent(ctx context.Context, eventId string) error {
+	return r.Rdb.Del(ctx, getEventBlockedKey(eventId)).Err()
+}
+
+func (r *RemoteCacheReservationRepository) IsBlockEvent(ctx context.Context, eventId string) (bool, error) {
+	n, err := r.Rdb.Exists(ctx, getEventBlockedKey(eventId)).Result()
+	if err != nil {
+		return false, err
+	}
+
+	return n > 0, nil
 }

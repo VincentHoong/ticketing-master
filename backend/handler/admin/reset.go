@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ticketing-master/handler/utils"
+	"ticketing-master/simulation"
 
 	"github.com/go-chi/chi/v5/middleware"
 )
@@ -52,6 +53,14 @@ func (h *AdminHandler) resetHandler(requestTimeout time.Duration) {
 		}
 		if !req.Scope.valid() {
 			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("scope must be %q, %q or %q", ScopeReservations, ScopeUsers, ScopeAll))
+			return
+		}
+
+		// Reject before touching anything: truncating under a run in flight corrupts the
+		// numbers it is measuring and can crash it mid-transaction. The UI disables this
+		// button while a run is active, but curl doesn't know that.
+		if h.Simulations.HasAnyActiveRun() {
+			utils.WriteErrorResponse(w, http.StatusConflict, simulation.ErrRunInProgress)
 			return
 		}
 

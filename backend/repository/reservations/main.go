@@ -185,15 +185,41 @@ func (r *ReservationRepository) RefreshEventStatus(ctx context.Context) error {
 }
 
 func (r *ReservationRepository) BlockEvent(ctx context.Context, eventId string) (evicted bool) {
-	return r.LRURepository.BlockEvent(ctx, eventId)
+	evicted = r.LRURepository.BlockEvent(ctx, eventId)
+
+	if err := r.RemoteCacheRepository.BlockEvent(ctx, eventId); err != nil {
+		log.Printf("block event: redis: %v", err)
+	}
+
+	return evicted
 }
 
 func (r *ReservationRepository) UnblockEvent(ctx context.Context, eventId string) (evicted bool) {
-	return r.LRURepository.UnblockEvent(ctx, eventId)
+	evicted = r.LRURepository.UnblockEvent(ctx, eventId)
+
+	if err := r.RemoteCacheRepository.UnblockEvent(ctx, eventId); err != nil {
+		log.Printf("unblock event: redis: %v", err)
+	}
+
+	return evicted
 }
 
 func (r *ReservationRepository) IsBlockEvent(ctx context.Context, eventId string) (evicted bool) {
-	return r.LRURepository.IsBlockEvent(ctx, eventId)
+	if r.LRURepository.IsBlockEvent(ctx, eventId) {
+		return true
+	}
+
+	blocked, err := r.RemoteCacheRepository.IsBlockEvent(ctx, eventId)
+	if err != nil {
+		log.Printf("is block event: redis: %v", err)
+		return false
+	}
+
+	if blocked {
+		r.LRURepository.BlockEvent(ctx, eventId)
+	}
+
+	return blocked
 }
 
 func (r *ReservationRepository) ClearBlockedEvents() {

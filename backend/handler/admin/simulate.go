@@ -111,7 +111,7 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 
 		// Raising capacity means a previously full event has seats again.
 		if req.Capacity > 0 {
-			h.Repositories.ReservationRepository.ClearBlockedEvents()
+			h.Repositories.ReservationRepository.UnblockEvent(r.Context(), req.EventId)
 		}
 
 		userIds, err := h.mintSimUsers(r, req.Users)

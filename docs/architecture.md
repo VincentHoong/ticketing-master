@@ -188,7 +188,7 @@ The response also carries `soldOut`, so a waiting client stops polling for a tur
 
 ## The sold-out short-circuit
 
-Once an event fills, `BlockEvent` marks it in a process-local LRU (`hashicorp/golang-lru/v2`, 128 entries). Subsequent reserves reject without opening a transaction.
+Once an event fills, `BlockEvent` marks it in a process-local LRU (`hashicorp/golang-lru/v2`, 128 entries) **and** a shared Redis flag (`reservation:event:{id}:blocked`, TTL'd as a safety net). Subsequent reserves reject without opening a transaction: `IsBlockEvent` checks the LRU first — a map lookup — and only falls through to Redis on a local miss, so a block set by one replica still fast-rejects on every other.
 
 It is a **cache of a fact the database owns**, so every path that makes the fact false must invalidate it:
 
@@ -202,7 +202,7 @@ It is a **cache of a fact the database owns**, so every path that makes the fact
 
 Five paths, none co-located, and the failure mode is silent — a stale block makes an empty event reject everything at `p50 = 0.00ms`, which reads as a *feature*. A regression run caught exactly this: the simulate reset path was missing, so runs 2 through 4 sold zero seats while looking fast.
 
-The scale-out fix is a Redis flag per event with a TTL, which expires on its own instead of relying on every future writer remembering to invalidate. Not needed for a single process.
+The TTL on the Redis flag exists only as a backstop in case a future writer forgets to invalidate — every real path above still unblocks explicitly, so it should never be the thing that actually clears a block.
 
 ---
 

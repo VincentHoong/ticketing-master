@@ -91,6 +91,22 @@ func (reg *Registry) HasActiveRun(eventId string) bool {
 	return ok && !existing.Runner.done.Load()
 }
 
+// HasAnyActiveRun reports whether any event is mid-run. For callers like a global reset
+// that are not scoped to one event, checking every tracked run is the only way to catch
+// a live run before mutating the tables and Redis keys it depends on.
+func (reg *Registry) HasAnyActiveRun() bool {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+
+	for _, run := range reg.runs {
+		if !run.Runner.done.Load() {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (reg *Registry) Get(runId string) (*Run, error) {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()

@@ -3,6 +3,7 @@ package users
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -47,7 +48,20 @@ func NewUserRepository(dbpool *pgxpool.Pool, rdb *redis.Client) IUserRepository 
 }
 
 func (e *UserRepository) GetUser(ctx context.Context, id string) (*UserItem, error) {
-	return e.PostgresRepository.GetUser(ctx, id)
+	if cached, err := e.RemoteCacheRepository.GetUser(ctx, id); err == nil {
+		return cached, nil
+	}
+
+	userItem, err := e.PostgresRepository.GetUser(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := e.RemoteCacheRepository.SetUser(ctx, userItem); err != nil {
+		log.Printf("get user: cache set: %v", err)
+	}
+
+	return userItem, nil
 }
 
 func (e *UserRepository) CreateUser(ctx context.Context, name string, email string, passwordHash string) (*UserItem, error) {
