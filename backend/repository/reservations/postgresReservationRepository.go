@@ -57,6 +57,21 @@ func (r *PostgresReservationRepository) GetReservation(ctx context.Context, id s
 	return &reservationItem, nil
 }
 
+func (r *PostgresReservationRepository) GetTotalReserved(ctx context.Context, eventId string) (int64, error) {
+	var total int64
+	err := r.DbPool.QueryRow(ctx, `
+		SELECT COALESCE(SUM(quantity), 0)
+		FROM reservations
+		WHERE event_id = $1
+		AND (
+			(status = $2 AND expires_at > now())
+			OR status = $3
+		)
+	`, eventId, StatusHeld, StatusConfirmed).Scan(&total)
+
+	return total, err
+}
+
 func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventId string, userId string, quantity uint32, idempotencyKey *string) (*ReservationItem, error) {
 	tx, err := r.DbPool.Begin(ctx)
 	if err != nil {

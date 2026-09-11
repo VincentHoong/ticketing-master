@@ -40,14 +40,19 @@ func (s *VirtualQueueService) Enqueue(ctx context.Context, eventId string, userI
 		return 0, err
 	}
 
-	ok, err := s.Repositories.VirtualQueueRepository.TryWhitelistEventQueue(ctx, eventId, 1)
+	if _, err := s.Repositories.VirtualQueueRepository.TryWhitelistEventQueue(ctx, eventId, 1); err != nil {
+		return 0, err
+	}
+
+	whitelistTTL, err = s.Repositories.VirtualQueueRepository.GetWhitelistedUserTTL(ctx, eventId, userId)
 	if err != nil {
 		return 0, err
 	}
-	if ok {
-		return s.Repositories.VirtualQueueRepository.DefaultWhitelistTTL(), nil
+	if whitelistTTL <= 0 {
+		return 0, nil
 	}
-	return 0, nil
+
+	return whitelistTTL, nil
 }
 
 func (s *VirtualQueueService) Dequeue(ctx context.Context, eventId string, userId string) error {

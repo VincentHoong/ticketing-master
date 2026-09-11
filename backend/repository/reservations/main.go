@@ -48,6 +48,7 @@ type IReservationRepository interface {
 	ConfirmReservation(ctx context.Context, userId string, reservationId string) error
 	ReleaseReservation(ctx context.Context, userId string, reservationId string) error
 	RefreshEventStatus(ctx context.Context) error
+	GetTotalReserved(ctx context.Context, eventId string) (int64, error)
 }
 
 type ReservationRepository struct {
@@ -94,6 +95,10 @@ func (r *ReservationRepository) ReserveEvent(ctx context.Context, eventId string
 		return nil, err
 	}
 	return reservationItem, nil
+}
+
+func (r *ReservationRepository) GetTotalReserved(ctx context.Context, eventId string) (int64, error) {
+	return r.PostgresRepository.GetTotalReserved(ctx, eventId)
 }
 
 func (r *ReservationRepository) ConfirmReservation(ctx context.Context, userId string, reservationId string) error {
