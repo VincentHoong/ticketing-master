@@ -1,0 +1,107 @@
+package admin
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"net/http"
+	"time"
+
+	"ticketing-master/handler/utils"
+
+	"github.com/go-chi/chi/v5/middleware"
+)
+
+type ResetScope string
+
+const (
+	ScopeReservations ResetScope = "reservations"
+	ScopeAll          ResetScope = "all"
+)
+
+type ResetRequest struct {
+	Scope ResetScope `json:"scope"`
+}
+
+type ResetResponse struct {
+	Scope             ResetScope `json:"scope"`
+	ReservationsCount int64      `json:"reservationsCleared"`
+	EventsCount       int64      `json:"eventsCleared"`
+	UsersCount        int64      `json:"usersCleared"`
+	RedisFlushed      bool       `json:"redisFlushed"`
+}
+
+func (h *AdminHandler) resetHandler(requestTimeout time.Duration) {
+	h.Router.With(middleware.Timeout(requestTimeout)).Post("/admin/reset", func(w http.ResponseWriter, r *http.Request) {
+		var req = &ResetRequest{}
+		if err := utils.DecodeRequestBody(w, r, req); err != nil {
+			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			return
+		}
+		if req.Scope == "" {
+			req.Scope = ScopeReservations
+		}
+		if req.Scope != ScopeReservations && req.Scope != ScopeAll {
+			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("scope must be %q or %q", ScopeReservations, ScopeAll))
+			return
+		}
+
+		response, err := h.reset(r.Context(), req.Scope)
+		if err != nil {
+			switch {
+			case errors.Is(err, context.Canceled):
+				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			case errors.Is(err, context.DeadlineExceeded):
+				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
+				log.Printf("request timed out: %v", err)
+			default:
+				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				log.Printf("reset: %v", err)
+			}
+			return
+		}
+
+		utils.WriteJSONResponse(w, http.StatusOK, response)
+	})
+}
+
+func (h *AdminHandler) reset(ctx context.Context, scope ResetScope) (*ResetResponse, error) {
+	response := &ResetResponse{Scope: scope}
+
+	tx, err := h.Repositories.DbPool.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+
+	if err := tx.QueryRow(ctx, `SELECT count(*) FROM reservations`).Scan(&response.ReservationsCount); err != nil {
+		return nil, err
+	}
+
+	if scope == ScopeAll {
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM events`).Scan(&response.EventsCount); err != nil {
+			return nil, err
+		}
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&response.UsersCount); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `TRUNCATE reservations, events, users RESTART IDENTITY CASCADE`); err != nil {
+			return nil, err
+		}
+	} else if _, err := tx.Exec(ctx, `TRUNCATE reservations RESTART IDENTITY`); err != nil {
+		return nil, err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, err
+	}
+
+	if err := h.Repositories.Rdb.FlushDB(ctx).Err(); err != nil {
+		log.Printf("reset: flush redis: %v", err)
+		return response, nil
+	}
+	response.RedisFlushed = true
+
+	return response, nil
+}

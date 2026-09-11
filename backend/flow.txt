@@ -1,0 +1,3 @@
+1. create event with maxReservePerUser, capacity, startSalesAt
+2. getEvent only will show startSalesAt time that is already passed
+3. user POST /events/{id}/reserve with quantity
