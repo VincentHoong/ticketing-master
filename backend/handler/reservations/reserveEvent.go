@@ -57,7 +57,7 @@ func (h *ReservationHandler) reserveEventHandler(requestTimeout time.Duration) {
 		if err != nil {
 			switch {
 			case errors.Is(err, reservationRepo.ErrInsufficientCapacity), errors.Is(err, reservationRepo.ErrExceedMaxReserveQuantity):
-				utils.WriteErrorResponse(w, http.StatusConflict, errors.New("reservation full"))
+				utils.WriteErrorResponse(w, http.StatusConflict, err)
 			case errors.Is(err, eventRepo.ErrEventNotFound):
 				utils.WriteErrorResponse(w, http.StatusNotFound, errors.New("event not found"))
 			case errors.Is(err, reservations.ErrQueueInProgress):

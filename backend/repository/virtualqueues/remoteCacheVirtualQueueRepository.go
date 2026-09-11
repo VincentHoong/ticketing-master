@@ -158,27 +158,60 @@ var dequeueLuaScript = redis.NewScript(`
 	local removedFromQueue = redis.call("ZREM", eventVirtualQueueKey, userId)
 	redis.call("DEL", userHeartbeatKey)
 
-	return removedFromQueue + removedFromWhitelist
+	return {removedFromQueue + removedFromWhitelist, removedFromWhitelist}
 `)
 
-func (r *RemoteCacheVirtualQueueRepository) Dequeue(ctx context.Context, eventId string, userId string) (bool, error) {
+func (r *RemoteCacheVirtualQueueRepository) Dequeue(ctx context.Context, eventId string, userId string) (bool, bool, error) {
 	eventVirtualQueueKey := getEventVirtualQueueKey(eventId)
 	eventWhitelistKey := getEventWhitelisKey(eventId)
 	userHeartbeatKey := getUserHeartbeatKey(eventId, userId)
-	affected, err := dequeueLuaScript.Run(
+	result, err := dequeueLuaScript.Run(
 		ctx,
 		r.Rdb,
 		[]string{eventVirtualQueueKey, eventWhitelistKey, userHeartbeatKey},
-		userId).Int64()
+		userId).Int64Slice()
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return affected > 0, nil
+	if len(result) < 2 {
+		return false, false, nil
+	}
+
+	return result[0] > 0, result[1] > 0, nil
 }
 
-func (r *RemoteCacheVirtualQueueRepository) Ping(ctx context.Context, eventId string, userId string) (bool, error) {
-	userHeartbeatKey := getUserHeartbeatKey(eventId, userId)
-	return r.Rdb.Expire(ctx, userHeartbeatKey, r.HeartbeatTTL).Result()
+var pingLuaScript = redis.NewScript(`
+	local eventWhitelistKey = KEYS[1]
+	local userHeartbeatKey = KEYS[2]
+	local userId = ARGV[1]
+	local heartbeatTTL = ARGV[2]
+
+	local ttl = redis.call("HTTL", eventWhitelistKey, "FIELDS", 1, userId)
+	if ttl and ttl[1] and tonumber(ttl[1]) > 0 then
+		return tonumber(ttl[1])
+	end
+
+	if redis.call("EXPIRE", userHeartbeatKey, heartbeatTTL) == 1 then
+		return 0
+	end
+	return -1
+`)
+
+func (r *RemoteCacheVirtualQueueRepository) Ping(ctx context.Context, eventId string, userId string) (time.Duration, bool, error) {
+	result, err := pingLuaScript.Run(
+		ctx,
+		r.Rdb,
+		[]string{getEventWhitelisKey(eventId), getUserHeartbeatKey(eventId, userId)},
+		userId,
+		int64(r.HeartbeatTTL.Seconds()),
+	).Int64()
+	if err != nil {
+		return 0, false, err
+	}
+	if result < 0 {
+		return 0, false, nil
+	}
+	return time.Duration(result) * time.Second, true, nil
 }
 
 var tryWhitelistEventQueueLuaScript = redis.NewScript(`

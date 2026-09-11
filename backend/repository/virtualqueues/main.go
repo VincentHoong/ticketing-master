@@ -24,9 +24,9 @@ type IVirtualQueueRepository interface {
 	Close()
 	DefaultWhitelistTTL() time.Duration
 	MaxConcurrentQueue() uint64
-	Ping(ctx context.Context, eventId string, userId string) (bool, error)
+	Ping(ctx context.Context, eventId string, userId string) (time.Duration, bool, error)
 	Enqueue(ctx context.Context, eventId string, userId string) (bool, error)
-	Dequeue(ctx context.Context, eventId string, userId string) (bool, error)
+	Dequeue(ctx context.Context, eventId string, userId string) (bool, bool, error)
 	GetTotalVirtualQueue(ctx context.Context, eventId string) (int64, error)
 	GetTotalEventWhitelist(ctx context.Context, eventId string) (int64, error)
 	GetWhitelistedUserTTL(ctx context.Context, eventId string, userId string) (time.Duration, error)
@@ -135,7 +135,7 @@ func (r *VirtualQueueRepository) MaxConcurrentQueue() uint64 {
 	return r.maxConcurrentQueue
 }
 
-func (r *VirtualQueueRepository) Ping(ctx context.Context, eventId string, userId string) (bool, error) {
+func (r *VirtualQueueRepository) Ping(ctx context.Context, eventId string, userId string) (time.Duration, bool, error) {
 	return r.RemoteCacheRepository.Ping(ctx, eventId, userId)
 }
 
@@ -143,7 +143,7 @@ func (r *VirtualQueueRepository) Enqueue(ctx context.Context, eventId string, us
 	return r.RemoteCacheRepository.Enqueue(ctx, eventId, userId)
 }
 
-func (r *VirtualQueueRepository) Dequeue(ctx context.Context, eventId string, userId string) (bool, error) {
+func (r *VirtualQueueRepository) Dequeue(ctx context.Context, eventId string, userId string) (bool, bool, error) {
 	return r.RemoteCacheRepository.Dequeue(ctx, eventId, userId)
 }
 

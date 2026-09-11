@@ -47,6 +47,7 @@ type ReleaseReservationRequest struct {
 func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveEventRequest) (*reservations.ReservationItem, error) {
 	isBlockEvent := s.Repositories.ReservationRepository.IsBlockEvent(ctx, request.EventId)
 	if isBlockEvent {
+		s.releaseQueueSlot(ctx, request.EventId, request.UserId)
 		return nil, reservations.ErrInsufficientCapacity
 	}
 

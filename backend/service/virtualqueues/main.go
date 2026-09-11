@@ -10,8 +10,14 @@ type VirtualQueueService struct {
 	Repositories *repository.Repositories
 }
 
+type QueueStatus struct {
+	WhitelistTTL time.Duration
+	Alive        bool
+	SoldOut      bool
+}
+
 type IVirtualQueueService interface {
-	Ping(ctx context.Context, eventId string, userId string) (bool, error)
+	Ping(ctx context.Context, eventId string, userId string) (QueueStatus, error)
 	Enqueue(ctx context.Context, eventId string, userId string) (time.Duration, error)
 	Dequeue(ctx context.Context, eventId string, userId string) error
 	GetTotalVirtualQueue(ctx context.Context, eventId string) (int64, error)
@@ -23,8 +29,17 @@ func NewVirtualQueueService(repositories *repository.Repositories) IVirtualQueue
 	}
 }
 
-func (s *VirtualQueueService) Ping(ctx context.Context, eventId string, userId string) (bool, error) {
-	return s.Repositories.VirtualQueueRepository.Ping(ctx, eventId, userId)
+func (s *VirtualQueueService) Ping(ctx context.Context, eventId string, userId string) (QueueStatus, error) {
+	whitelistTTL, alive, err := s.Repositories.VirtualQueueRepository.Ping(ctx, eventId, userId)
+	if err != nil {
+		return QueueStatus{}, err
+	}
+
+	return QueueStatus{
+		WhitelistTTL: whitelistTTL,
+		Alive:        alive,
+		SoldOut:      s.Repositories.ReservationRepository.IsBlockEvent(ctx, eventId),
+	}, nil
 }
 
 func (s *VirtualQueueService) Enqueue(ctx context.Context, eventId string, userId string) (time.Duration, error) {
@@ -56,13 +71,13 @@ func (s *VirtualQueueService) Enqueue(ctx context.Context, eventId string, userI
 }
 
 func (s *VirtualQueueService) Dequeue(ctx context.Context, eventId string, userId string) error {
-	affected, err := s.Repositories.VirtualQueueRepository.Dequeue(ctx, eventId, userId)
+	_, releasedSlot, err := s.Repositories.VirtualQueueRepository.Dequeue(ctx, eventId, userId)
 
 	if err != nil {
 		return err
 	}
 
-	if affected {
+	if releasedSlot {
 		s.Repositories.VirtualQueueRepository.TryWhitelistEventQueue(ctx, eventId, 1)
 	}
 
