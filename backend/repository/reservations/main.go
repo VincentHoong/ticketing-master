@@ -7,7 +7,6 @@ import (
 	"sync"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -59,21 +58,22 @@ type IReservationRepository interface {
 type ReservationRepository struct {
 	PostgresRepository         *PostgresReservationRepository
 	RemoteCacheRepository      *RemoteCacheReservationRepository
+	LRURepository              *LRUReservationRepository
 	stopRefreshEventStatusChan chan bool
 	stopRefreshEventStatusOnce sync.Once
-	eventFullyBookedLRU        *lru.Cache[string, bool]
 }
 
 func NewReservationRepository(dbpool *pgxpool.Pool, rdb *redis.Client) (IReservationRepository, error) {
-	lruCache, err := lru.New[string, bool](128)
+	lruRepository, err := newLRUReservationRepository()
 	if err != nil {
 		return nil, err
 	}
+
 	r := &ReservationRepository{
 		PostgresRepository:         newPostgresReservationRepository(dbpool),
 		RemoteCacheRepository:      newRemoteCacheReservationRepository(rdb),
+		LRURepository:              lruRepository,
 		stopRefreshEventStatusChan: make(chan bool),
-		eventFullyBookedLRU:        lruCache,
 	}
 	r.startRefreshEventStatusTicker()
 
@@ -185,17 +185,17 @@ func (r *ReservationRepository) RefreshEventStatus(ctx context.Context) error {
 }
 
 func (r *ReservationRepository) BlockEvent(ctx context.Context, eventId string) (evicted bool) {
-	return r.eventFullyBookedLRU.Add(eventId, true)
+	return r.LRURepository.BlockEvent(ctx, eventId)
 }
 
 func (r *ReservationRepository) UnblockEvent(ctx context.Context, eventId string) (evicted bool) {
-	return r.eventFullyBookedLRU.Remove(eventId)
+	return r.LRURepository.UnblockEvent(ctx, eventId)
 }
 
 func (r *ReservationRepository) IsBlockEvent(ctx context.Context, eventId string) bool {
-	return r.eventFullyBookedLRU.Contains(eventId)
+	return r.LRURepository.IsBlockEvent(ctx, eventId)
 }
 
 func (r *ReservationRepository) ClearBlockedEvents() {
-	r.eventFullyBookedLRU.Purge()
+	r.LRURepository.ClearBlockedEvents()
 }

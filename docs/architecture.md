@@ -289,7 +289,6 @@ Everything else converges on the green node. A branch that returns without passi
 
 ---
 
-## Known deviations
+## Not built
 
-- **Hold TTL is 10 minutes** (`reservationTTL`), where the original target was 5.
-- **Only one contention strategy is implemented.** Pessimistic row locking plus Redis admission control, compared across admission settings and transports. Serializing an event's reservations through a single log partition (Kafka) would be the third strategy worth benchmarking against, and is not built.
+- **A second contention strategy.** This implements pessimistic row locking plus Redis admission control, and benchmarks it across admission settings and transports. Serializing each event's reservations through a single log partition (Kafka) would resolve contention by architecture rather than by locking — no lock, one consumer, strict order. Benchmarking that against the row lock is the most interesting piece still missing, because the two fail in different ways: the row lock degrades with contention, the log degrades with partition throughput.
