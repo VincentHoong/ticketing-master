@@ -144,7 +144,6 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 		RETURNING id, status;
 	`, eventId, userId, quantity, idempotencyKey, reservedAt, expiresAt).Scan(&id, &status)
 
-	isCapped = dbActiveReserved+quantity >= dbCapacity
 	if err != nil {
 		return nil, isCapped, err
 	}
@@ -154,6 +153,7 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 		return nil, isCapped, err
 	}
 
+	isCapped = dbActiveReserved+quantity >= dbCapacity
 	return &ReservationItem{
 		Id:             id,
 		EventId:        eventId,
@@ -168,7 +168,7 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 	}, isCapped, nil
 }
 
-func (r *PostgresReservationRepository) UpdateReservation(ctx context.Context, userId string, reservationId string, status ReservationStatus) error {
+func (r *PostgresReservationRepository) UpdateReservation(ctx context.Context, userId string, reservationId string, status ReservationStatus) (string, error) {
 	var column string
 	switch status {
 	case StatusConfirmed:
@@ -176,49 +176,68 @@ func (r *PostgresReservationRepository) UpdateReservation(ctx context.Context, u
 	case StatusReleased:
 		column = "released_at"
 	default:
-		return ErrInvalidReservationUpdateStatus
+		return "", ErrInvalidReservationUpdateStatus
 	}
 
 	tx, err := r.DbPool.Begin(ctx)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer tx.Rollback(ctx)
 
-	tag, err := tx.Exec(ctx, fmt.Sprintf(`
+	var eventId string
+	err = tx.QueryRow(ctx, fmt.Sprintf(`
 		UPDATE reservations SET
 		status = $1,
 		%s = $2
 		WHERE id = $3
 		AND user_id = $4
 		AND status = $5
-		AND expires_at > now();
-	`, column), status, time.Now(), reservationId, userId, StatusHeld)
+		AND expires_at > now()
+		RETURNING event_id;
+	`, column), status, time.Now(), reservationId, userId, StatusHeld).Scan(&eventId)
 
 	if err != nil {
-		return err
-	}
-	if tag.RowsAffected() == 0 {
-		return ErrReservationNotFound
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", ErrReservationNotFound
+		}
+		return "", err
 	}
 
-	return tx.Commit(ctx)
+	return eventId, tx.Commit(ctx)
 }
 
-func (r *PostgresReservationRepository) RefreshEventStatus(ctx context.Context) (int64, error) {
-	tags, err := r.DbPool.Exec(ctx, `
-		UPDATE reservations SET
-		status = $1,
-		released_at = now()
-		WHERE status = $2
-		AND expires_at <= now()
+func (r *PostgresReservationRepository) RefreshEventStatus(ctx context.Context) ([]string, int64, error) {
+	pgRows, err := r.DbPool.Query(ctx, `
+		WITH expired AS (
+			UPDATE reservations SET
+			status = $1,
+			released_at = now()
+			WHERE status = $2
+			AND expires_at <= now()
+			RETURNING event_id
+		)
+		SELECT event_id, count(*) FROM expired GROUP BY event_id
 	`, StatusExpired, StatusHeld)
 
 	if err != nil {
-		return 0, err
+		return nil, 0, err
+	}
+	defer pgRows.Close()
+
+	var eventIds []string
+	var total int64
+	for pgRows.Next() {
+		var eventId string
+		var count int64
+		if err := pgRows.Scan(&eventId, &count); err != nil {
+			return nil, 0, err
+		}
+		eventIds = append(eventIds, eventId)
+		total += count
 	}
 
-	return tags.RowsAffected(), nil
+	return eventIds, total, pgRows.Err()
 }
 
 func (r *PostgresReservationRepository) GetReservationByIdempotencyKey(ctx context.Context, eventId string, userId string, idempotencyKey string) (*ReservationItem, error) {

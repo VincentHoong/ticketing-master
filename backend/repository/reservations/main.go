@@ -113,11 +113,19 @@ func (r *ReservationRepository) GetTotalReserved(ctx context.Context, eventId st
 }
 
 func (r *ReservationRepository) ConfirmReservation(ctx context.Context, userId string, reservationId string) error {
-	return r.PostgresRepository.UpdateReservation(ctx, userId, reservationId, StatusConfirmed)
+	_, err := r.PostgresRepository.UpdateReservation(ctx, userId, reservationId, StatusConfirmed)
+	return err
 }
 
 func (r *ReservationRepository) ReleaseReservation(ctx context.Context, userId string, reservationId string) error {
-	return r.PostgresRepository.UpdateReservation(ctx, userId, reservationId, StatusReleased)
+	eventId, err := r.PostgresRepository.UpdateReservation(ctx, userId, reservationId, StatusReleased)
+	if err != nil {
+		return err
+	}
+
+	r.UnblockEvent(ctx, eventId)
+
+	return nil
 }
 
 func (r *ReservationRepository) startRefreshEventStatusTicker() {
@@ -161,10 +169,18 @@ func (r *ReservationRepository) RefreshEventStatus(ctx context.Context) error {
 		r.RemoteCacheRepository.ReleaseRefreshEventStatus(releaseCtx, token)
 	}()
 
-	_, err = r.PostgresRepository.RefreshEventStatus(ctx)
+	eventIds, expired, err := r.PostgresRepository.RefreshEventStatus(ctx)
 	if err != nil {
 		return err
 	}
+
+	for _, eventId := range eventIds {
+		r.UnblockEvent(ctx, eventId)
+	}
+	if expired > 0 {
+		log.Printf("refresh event status: expired %d holds across %d events", expired, len(eventIds))
+	}
+
 	return nil
 }
 
