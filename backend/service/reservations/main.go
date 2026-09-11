@@ -114,7 +114,14 @@ func (s *ReservationService) releaseQueueSlot(ctx context.Context, eventId strin
 }
 
 func (s *ReservationService) ConfirmReservation(ctx context.Context, request *ConfirmReservationRequest) error {
-	return s.Repositories.ReservationRepository.ConfirmReservation(ctx, request.UserId, request.ReservationId)
+	err := s.Repositories.ReservationRepository.ConfirmReservation(ctx, request.UserId, request.ReservationId)
+	if errors.Is(err, reservations.ErrReservationNotFound) {
+		if res, e := s.Repositories.ReservationRepository.GetReservation(ctx, request.ReservationId); e == nil &&
+			res.UserId == request.UserId && res.Status == reservations.StatusConfirmed {
+			return nil
+		}
+	}
+	return err
 }
 
 func (s *ReservationService) ReleaseReservation(ctx context.Context, request *ReleaseReservationRequest) error {
