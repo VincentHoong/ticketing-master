@@ -53,6 +53,7 @@ type Snapshot struct {
 	RejectedCapacity int64            `json:"rejectedCapacity"`
 	RejectedQuota    int64            `json:"rejectedQuota"`
 	TimedOut         int64            `json:"timedOut"`
+	Cancelled        int64            `json:"cancelled"`
 	Errors           int64            `json:"errors"`
 	InQueue          int64            `json:"inQueue"`
 	WhitelistSize    int64            `json:"whitelistSize"`
@@ -92,6 +93,7 @@ type Runner struct {
 	rejectedCapacity atomic.Int64
 	rejectedQuota    atomic.Int64
 	timedOut         atomic.Int64
+	cancelled        atomic.Int64
 	errors           atomic.Int64
 
 	reserveSem chan struct{}
@@ -176,7 +178,7 @@ func (r *Runner) runUser(ctx context.Context, userId string) {
 	enqueuedAt := time.Now()
 	whitelistTTL, err := r.services.VirtualQueueService.Enqueue(userCtx, r.cfg.EventId, userId)
 	if err != nil {
-		r.recordError("enqueue", err)
+		r.classify("enqueue", err)
 		return
 	}
 	r.enqueued.Add(1)
@@ -191,7 +193,7 @@ func (r *Runner) runUser(ctx context.Context, userId string) {
 
 	select {
 	case <-userCtx.Done():
-		r.timedOut.Add(1)
+		r.classify("reserve-queue", userCtx.Err())
 		return
 	case r.reserveSem <- struct{}{}:
 	}
@@ -212,10 +214,8 @@ func (r *Runner) runUser(ctx context.Context, userId string) {
 		r.rejectedCapacity.Add(1)
 	case errors.Is(err, reservationRepo.ErrExceedMaxReserveQuantity):
 		r.rejectedQuota.Add(1)
-	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
-		r.timedOut.Add(1)
 	default:
-		r.recordError("reserve", err)
+		r.classify("reserve", err)
 	}
 }
 
@@ -227,23 +227,30 @@ func (r *Runner) waitForAdmission(ctx context.Context, userId string) bool {
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				r.timedOut.Add(1)
-			} else {
-				r.recordError("poll-cancelled", ctx.Err())
-			}
+			r.classify("poll", ctx.Err())
 			return false
 		case <-timer.C:
 		}
 
 		ttl, err := r.repositories.VirtualQueueRepository.GetWhitelistedUserTTL(ctx, r.cfg.EventId, userId)
 		if err != nil {
-			r.recordError("poll", err)
+			r.classify("poll", err)
 			return false
 		}
 		if ttl > 0 {
 			return true
 		}
+	}
+}
+
+func (r *Runner) classify(stage string, err error) {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		r.timedOut.Add(1)
+	case errors.Is(err, context.Canceled):
+		r.cancelled.Add(1)
+	default:
+		r.recordError(stage, err)
 	}
 }
 
@@ -280,6 +287,7 @@ func (r *Runner) Snapshot(parent context.Context) Snapshot {
 		RejectedCapacity: r.rejectedCapacity.Load(),
 		RejectedQuota:    r.rejectedQuota.Load(),
 		TimedOut:         r.timedOut.Load(),
+		Cancelled:        r.cancelled.Load(),
 		Errors:           r.errors.Load(),
 		MaxConcurrent:    r.cfg.MaxConcurrent,
 		Workers:          r.cfg.Workers,

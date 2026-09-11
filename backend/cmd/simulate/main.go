@@ -161,9 +161,10 @@ func printReport(s simulation.Snapshot, elapsed time.Duration) {
 	fmt.Printf("  rejected capacity %d\n", s.RejectedCapacity)
 	fmt.Printf("  rejected quota    %d\n", s.RejectedQuota)
 	fmt.Printf("  timed out         %d\n", s.TimedOut)
+	fmt.Printf("  cancelled         %d\n", s.Cancelled)
 	fmt.Printf("  errors            %d\n", s.Errors)
 	fmt.Printf("  accounted         %d / %d\n",
-		s.Reserved+s.RejectedCapacity+s.RejectedQuota+s.TimedOut+s.Errors, s.TotalUsers)
+		s.Reserved+s.RejectedCapacity+s.RejectedQuota+s.TimedOut+s.Cancelled+s.Errors, s.TotalUsers)
 	fmt.Println()
 
 	if len(s.ErrorCounts) > 0 {

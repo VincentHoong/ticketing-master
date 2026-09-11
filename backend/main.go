@@ -64,7 +64,7 @@ func newServer(cfg *config.Config, r *chi.Mux) *http.Server {
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
 		ReadTimeout:  5 * time.Second,
-		WriteTimeout: 0,
+		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 }
