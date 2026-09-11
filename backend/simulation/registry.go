@@ -75,6 +75,22 @@ func (reg *Registry) Start(cfg Config) (*Run, error) {
 	return run, nil
 }
 
+// HasActiveRun reports whether an event is mid-run. Callers that mutate state before
+// starting must check this first: Start's own guard rejects the duplicate, but only
+// after the caller has already reset the database and Redis out from under the live run.
+func (reg *Registry) HasActiveRun(eventId string) bool {
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+
+	runId, ok := reg.byEvent[eventId]
+	if !ok {
+		return false
+	}
+	existing, ok := reg.runs[runId]
+
+	return ok && !existing.Runner.done.Load()
+}
+
 func (reg *Registry) Get(runId string) (*Run, error) {
 	reg.mu.Lock()
 	defer reg.mu.Unlock()

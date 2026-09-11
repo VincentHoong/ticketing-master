@@ -17,8 +17,16 @@ type ResetScope string
 
 const (
 	ScopeReservations ResetScope = "reservations"
-	ScopeAll          ResetScope = "all"
+	// ScopeUsers also clears users, which every simulation mints fresh on start and never
+	// reuses. Without it the only way to stop them accumulating is ScopeAll, which also
+	// destroys the events the demo was set up around.
+	ScopeUsers ResetScope = "users"
+	ScopeAll   ResetScope = "all"
 )
+
+func (s ResetScope) valid() bool {
+	return s == ScopeReservations || s == ScopeUsers || s == ScopeAll
+}
 
 type ResetRequest struct {
 	Scope ResetScope `json:"scope"`
@@ -42,8 +50,8 @@ func (h *AdminHandler) resetHandler(requestTimeout time.Duration) {
 		if req.Scope == "" {
 			req.Scope = ScopeReservations
 		}
-		if req.Scope != ScopeReservations && req.Scope != ScopeAll {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("scope must be %q or %q", ScopeReservations, ScopeAll))
+		if !req.Scope.valid() {
+			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("scope must be %q, %q or %q", ScopeReservations, ScopeUsers, ScopeAll))
 			return
 		}
 
@@ -79,23 +87,37 @@ func (h *AdminHandler) reset(ctx context.Context, scope ResetScope) (*ResetRespo
 		return nil, err
 	}
 
-	if scope == ScopeAll {
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM events`).Scan(&response.EventsCount); err != nil {
+	if scope == ScopeUsers || scope == ScopeAll {
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&response.UsersCount); err != nil {
 			return nil, err
 		}
-		if err := tx.QueryRow(ctx, `SELECT count(*) FROM users`).Scan(&response.UsersCount); err != nil {
+	}
+
+	switch scope {
+	case ScopeAll:
+		if err := tx.QueryRow(ctx, `SELECT count(*) FROM events`).Scan(&response.EventsCount); err != nil {
 			return nil, err
 		}
 		if _, err := tx.Exec(ctx, `TRUNCATE reservations, events, users RESTART IDENTITY CASCADE`); err != nil {
 			return nil, err
 		}
-	} else if _, err := tx.Exec(ctx, `TRUNCATE reservations RESTART IDENTITY`); err != nil {
-		return nil, err
+	case ScopeUsers:
+		// Naming reservations explicitly rather than relying on the cascade, so the
+		// statement says what it truncates. Events are untouched.
+		if _, err := tx.Exec(ctx, `TRUNCATE reservations, users RESTART IDENTITY CASCADE`); err != nil {
+			return nil, err
+		}
+	default:
+		if _, err := tx.Exec(ctx, `TRUNCATE reservations RESTART IDENTITY`); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, err
 	}
+
+	h.Repositories.ReservationRepository.ClearBlockedEvents()
 
 	if err := h.Repositories.Rdb.FlushDB(ctx).Err(); err != nil {
 		log.Printf("reset: flush redis: %v", err)

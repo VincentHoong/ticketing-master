@@ -42,7 +42,7 @@ func NewHandler(cfg *config.Config, services *service.Services, repositories *re
 
 	if cfg.DemoMode {
 		log.Print("DEMO_MODE enabled: registering /admin routes")
-		admin.NewHandler(r, services, repositories)
+		admin.NewHandler(r, services, repositories, cfg.JwtSecret, cfg.Port)
 	}
 
 	return r

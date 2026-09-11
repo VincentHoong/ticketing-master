@@ -1,0 +1,128 @@
+.panel {
+  margin-bottom: 1.5rem;
+}
+
+.empty {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  opacity: 0.7;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+}
+
+.table th,
+.table td {
+  border: 2px solid var(--ink);
+  padding: 0.5rem 0.6rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th {
+  background: var(--ink);
+  color: var(--paper);
+  text-transform: uppercase;
+  font-size: 0.68rem;
+  letter-spacing: 0.06em;
+}
+
+.runId {
+  opacity: 0.6;
+}
+
+.badRow {
+  background: color-mix(in srgb, var(--pink) 15%, var(--panel));
+  font-weight: 700;
+}
+
+.unknownRow {
+  background: repeating-linear-gradient(45deg, transparent, transparent 8px, rgba(0, 0, 0, 0.05) 8px, rgba(0, 0, 0, 0.05) 16px);
+}
+
+.verdict {
+  border: var(--border-w) solid var(--ink);
+  background: var(--paper);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.verdictHead {
+  font-family: var(--mono);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.78rem;
+  margin-bottom: 0.85rem;
+}
+
+.verdictGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+}
+
+.delta {
+  border: 2px solid var(--ink);
+  padding: 0.6rem 0.7rem;
+  background: var(--panel);
+}
+
+.deltaLabel {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.7;
+}
+
+.deltaValues {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-family: var(--mono);
+  font-weight: 800;
+  font-size: 1.05rem;
+  margin: 0.25rem 0;
+}
+
+.deltaArrow {
+  opacity: 0.45;
+}
+
+.deltaTo {
+  color: var(--pink-deep);
+}
+
+.deltaNote {
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  opacity: 0.7;
+}
+
+.verdictSafe,
+.verdictBad {
+  margin-top: 0.85rem;
+  padding: 0.5rem 0.7rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 2px solid var(--ink);
+}
+
+.verdictSafe {
+  background: var(--lime);
+}
+
+.verdictBad {
+  background: var(--pink-deep);
+  color: var(--paper);
+}

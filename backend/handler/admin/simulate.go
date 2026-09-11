@@ -14,12 +14,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 )
 
 const (
 	maxSimulatedUsers = 20000
-	streamInterval    = 250 * time.Millisecond
+	// Each HTTP user holds a real socket, so the ceiling here is file descriptors rather
+	// than goroutines. Well under the usual 10240 soft limit, leaving room for the pools.
+	maxHTTPSimulatedUsers = 4000
+	streamInterval        = 250 * time.Millisecond
 )
 
 type SimulateRequest struct {
@@ -32,6 +36,7 @@ type SimulateRequest struct {
 	PollMs        int64  `json:"pollMs"`
 	UserTimeoutMs int64  `json:"userTimeoutMs"`
 	Reset         bool   `json:"reset"`
+	Transport     string `json:"transport"`
 }
 
 type SimulateResponse struct {
@@ -53,6 +58,26 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 		}
 		if req.Users <= 0 || req.Users > maxSimulatedUsers {
 			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("users must be between 1 and %d", maxSimulatedUsers))
+			return
+		}
+
+		transport := simulation.Transport(req.Transport)
+		if transport == "" {
+			transport = simulation.TransportInProcess
+		}
+		if transport != simulation.TransportInProcess && transport != simulation.TransportHTTP {
+			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("transport must be %q or %q", simulation.TransportInProcess, simulation.TransportHTTP))
+			return
+		}
+		if transport == simulation.TransportHTTP && req.Users > maxHTTPSimulatedUsers {
+			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("http transport supports at most %d users, got %d", maxHTTPSimulatedUsers, req.Users))
+			return
+		}
+
+		// Reject before touching anything: the capacity update, the truncate and the
+		// Redis flush below would otherwise destroy the state of the run already in flight.
+		if h.Simulations.HasActiveRun(req.EventId) {
+			utils.WriteErrorResponse(w, http.StatusConflict, simulation.ErrRunInProgress)
 			return
 		}
 
@@ -78,6 +103,15 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
 				return
 			}
+			// The sold-out markers live in this process, so clearing the rows without
+			// clearing them leaves every later run short-circuiting on an event that is
+			// now empty.
+			h.Repositories.ReservationRepository.ClearBlockedEvents()
+		}
+
+		// Raising capacity means a previously full event has seats again.
+		if req.Capacity > 0 {
+			h.Repositories.ReservationRepository.ClearBlockedEvents()
 		}
 
 		userIds, err := h.mintSimUsers(r, req.Users)
@@ -85,6 +119,14 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
 			log.Printf("simulate: mint users: %v", err)
 			return
+		}
+
+		var tokens map[string]string
+		if transport == simulation.TransportHTTP {
+			if tokens, err = h.mintTokens(userIds); err != nil {
+				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				return
+			}
 		}
 
 		run, err := h.Simulations.Start(simulation.Config{
@@ -95,6 +137,9 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 			Workers:       req.Workers,
 			PollInterval:  time.Duration(req.PollMs) * time.Millisecond,
 			UserTimeout:   time.Duration(req.UserTimeoutMs) * time.Millisecond,
+			Transport:     transport,
+			BaseURL:       h.BaseURL,
+			Tokens:        tokens,
 		})
 		if err != nil {
 			if errors.Is(err, simulation.ErrRunInProgress) {
@@ -205,4 +250,22 @@ func (h *AdminHandler) mintSimUsers(r *http.Request, count int) ([]string, error
 	}
 
 	return h.Repositories.UserRepository.CreateUsers(r.Context(), newUsers)
+}
+
+// mintTokens issues the bearer token each simulated user authenticates with, using the
+// same claims and secret as /users/login so the run exercises the real auth path.
+func (h *AdminHandler) mintTokens(userIds []string) (map[string]string, error) {
+	tokens := make(map[string]string, len(userIds))
+	secret := []byte(h.JwtSecret)
+
+	for _, userId := range userIds {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, &jwt.RegisteredClaims{Subject: userId})
+		signed, err := token.SignedString(secret)
+		if err != nil {
+			return nil, err
+		}
+		tokens[userId] = signed
+	}
+
+	return tokens, nil
 }

@@ -1,0 +1,67 @@
+.panel {
+  margin-bottom: 1.5rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.block {
+  border: 3px dashed var(--ink);
+  padding: 0.85rem;
+}
+
+.heading {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 800;
+  margin-bottom: 0.75rem;
+}
+
+.row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.row .field {
+  min-width: 90px;
+}
+
+.msg {
+  margin-top: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  word-break: break-word;
+}
+
+.hint {
+  margin-top: 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  opacity: 0.75;
+  line-height: 1.4;
+}
+
+.headRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.toggle {
+  font-size: 0.72rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--panel);
+}

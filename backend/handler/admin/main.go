@@ -15,6 +15,8 @@ type AdminHandler struct {
 	Services     *service.Services
 	Repositories *repository.Repositories
 	Simulations  *simulation.Registry
+	JwtSecret    string
+	BaseURL      string
 }
 
 const (
@@ -26,12 +28,14 @@ const (
 	simulateCancelTimeout   = 10 * time.Second
 )
 
-func NewHandler(router *chi.Mux, services *service.Services, repositories *repository.Repositories) *AdminHandler {
+func NewHandler(router *chi.Mux, services *service.Services, repositories *repository.Repositories, jwtSecret string, port string) *AdminHandler {
 	h := AdminHandler{
 		Router:       router,
 		Services:     services,
 		Repositories: repositories,
 		Simulations:  simulation.NewRegistry(services, repositories),
+		JwtSecret:    jwtSecret,
+		BaseURL:      "http://127.0.0.1:" + port,
 	}
 
 	h.mintUsersHandler(mintUsersTimeout)

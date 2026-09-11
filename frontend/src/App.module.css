@@ -1,0 +1,20 @@
+.app {
+  min-height: 100vh;
+  padding: 1.5rem 1rem 3rem;
+}
+
+.container {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  opacity: 0.6;
+  padding-top: 1rem;
+}

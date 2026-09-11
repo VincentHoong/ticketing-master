@@ -1,0 +1,37 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.barHead {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.track {
+  height: 0.85rem;
+  border: 2px solid var(--ink);
+  background: var(--paper);
+}
+
+.fill {
+  height: 100%;
+  transition: width 0.25s ease;
+}
+
+.extra {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  opacity: 0.65;
+}

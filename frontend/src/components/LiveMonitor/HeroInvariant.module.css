@@ -1,0 +1,88 @@
+.hero {
+  border: var(--border-w) solid var(--ink);
+  box-shadow: var(--shadow-off) var(--shadow-off) 0 var(--ink);
+  padding: 1.75rem 1.5rem;
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.label {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 0.5rem;
+}
+
+.value {
+  font-family: var(--mono);
+  font-size: clamp(2.75rem, 9vw, 5.5rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.slash {
+  opacity: 0.4;
+}
+
+.status {
+  margin-top: 0.75rem;
+  font-family: var(--mono);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 1rem;
+}
+
+.idle {
+  background: var(--panel);
+  color: var(--ink);
+}
+
+.safe {
+  background: var(--lime);
+  color: var(--ink);
+}
+
+.oversold {
+  background: var(--pink-deep);
+  color: var(--paper);
+  animation: alarm 0.6s ease-in-out infinite alternate;
+}
+
+.unknown {
+  background: repeating-linear-gradient(45deg, #fff, #fff 10px, var(--paper) 10px, var(--paper) 20px);
+  color: var(--ink);
+}
+
+@keyframes alarm {
+  from {
+    box-shadow: var(--shadow-off) var(--shadow-off) 0 var(--ink);
+  }
+  to {
+    box-shadow: var(--shadow-off) var(--shadow-off) 0 var(--ink), 0 0 0 6px var(--ink) inset;
+  }
+}
+
+.pending {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.footnote {
+  margin-top: 0.85rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oversold {
+    animation: none;
+    box-shadow: var(--shadow-off) var(--shadow-off) 0 var(--ink), 0 0 0 6px var(--ink) inset;
+  }
+}

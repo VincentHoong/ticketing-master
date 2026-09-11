@@ -1,0 +1,38 @@
+.wrap {
+  border: 3px solid var(--pink);
+  background: color-mix(in srgb, var(--pink) 8%, var(--panel));
+  padding: 0.75rem;
+}
+
+.label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.5rem;
+  color: var(--pink);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.item {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.count {
+  font-weight: 800;
+}
+
+.item {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}

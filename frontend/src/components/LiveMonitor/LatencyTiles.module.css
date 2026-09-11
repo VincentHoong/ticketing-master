@@ -1,0 +1,45 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.groupLabel {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hint {
+  font-weight: 400;
+  text-transform: none;
+  opacity: 0.6;
+  letter-spacing: 0;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(85px, 1fr));
+  gap: 0.5rem;
+}
+
+.secondaryRow {
+  display: flex;
+  gap: 1.25rem;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  padding: 0.35rem 0;
+  opacity: 0.8;
+}
+
+.secondaryItem strong {
+  font-weight: 800;
+}
