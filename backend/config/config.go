@@ -24,8 +24,7 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
-	err := godotenv.Load()
-	if err != nil {
+	if err := godotenv.Load(); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 
