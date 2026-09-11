@@ -33,10 +33,14 @@ func NewRepositories(ctx context.Context, cfg *config.Config) (*Repositories, er
 	if err != nil {
 		return nil, err
 	}
+	reservationRepository, err := reservations.NewReservationRepository(dbpool, rdb)
+	if err != nil {
+		return nil, err
+	}
 
 	return &Repositories{
 		EventRepository:        events.NewEventRepository(dbpool, rdb),
-		ReservationRepository:  reservations.NewReservationRepository(dbpool, rdb),
+		ReservationRepository:  reservationRepository,
 		UserRepository:         users.NewUserRepository(dbpool, rdb),
 		VirtualQueueRepository: virtualqueues.NewVirtualQueueRepository(rdb, cfg),
 		DbPool:                 dbpool,

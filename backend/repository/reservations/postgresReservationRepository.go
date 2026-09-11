@@ -72,10 +72,10 @@ func (r *PostgresReservationRepository) GetTotalReserved(ctx context.Context, ev
 	return total, err
 }
 
-func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventId string, userId string, quantity uint32, idempotencyKey *string) (*ReservationItem, error) {
+func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventId string, userId string, quantity uint32, idempotencyKey *string) (*ReservationItem, bool, error) {
 	tx, err := r.DbPool.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer tx.Rollback(ctx)
 
@@ -89,12 +89,12 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 	`, eventId).Scan(&dbCapacity, &dbMaxReservePerUser)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, events.ErrEventNotFound
+			return nil, false, events.ErrEventNotFound
 		}
-		return nil, err
+		return nil, false, err
 	}
 	if quantity > dbMaxReservePerUser {
-		return nil, ErrExceedMaxReserveQuantity
+		return nil, false, ErrExceedMaxReserveQuantity
 	}
 
 	var dbActiveReserved uint32
@@ -111,13 +111,14 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 		)
 	`, eventId, StatusHeld, StatusConfirmed, userId).Scan(&dbActiveReserved, &dbActivePerUserReserved)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
+	isCapped := dbActiveReserved >= dbCapacity
 	if dbActivePerUserReserved+quantity > dbMaxReservePerUser {
-		return nil, ErrExceedMaxReserveQuantity
+		return nil, isCapped, ErrExceedMaxReserveQuantity
 	}
 	if dbActiveReserved+quantity > dbCapacity {
-		return nil, ErrInsufficientCapacity
+		return nil, isCapped, ErrInsufficientCapacity
 	}
 
 	var id string
@@ -143,13 +144,14 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 		RETURNING id, status;
 	`, eventId, userId, quantity, idempotencyKey, reservedAt, expiresAt).Scan(&id, &status)
 
+	isCapped = dbActiveReserved+quantity >= dbCapacity
 	if err != nil {
-		return nil, err
+		return nil, isCapped, err
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		return nil, err
+		return nil, isCapped, err
 	}
 
 	return &ReservationItem{
@@ -163,7 +165,7 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 		ExpiresAt:      &expiresAt,
 		CreatedAt:      &reservedAt,
 		UpdatedAt:      &reservedAt,
-	}, nil
+	}, isCapped, nil
 }
 
 func (r *PostgresReservationRepository) UpdateReservation(ctx context.Context, userId string, reservationId string, status ReservationStatus) error {

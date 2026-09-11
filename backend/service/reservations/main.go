@@ -45,6 +45,11 @@ type ReleaseReservationRequest struct {
 }
 
 func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveEventRequest) (*reservations.ReservationItem, error) {
+	isBlockEvent := s.Repositories.ReservationRepository.IsBlockEvent(ctx, request.EventId)
+	if isBlockEvent {
+		return nil, reservations.ErrInsufficientCapacity
+	}
+
 	if request.IdempotencyKey != nil {
 		reservationItem, _ := s.Repositories.ReservationRepository.GetReservationByIdempotencyKey(ctx, request.EventId, request.UserId, *request.IdempotencyKey)
 		if reservationItem != nil {
@@ -67,7 +72,7 @@ func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveE
 		return nil, err
 	}
 
-	reservationItem, err := s.Repositories.ReservationRepository.ReserveEvent(
+	reservationItem, isCapped, err := s.Repositories.ReservationRepository.ReserveEvent(
 		ctx,
 		request.EventId,
 		request.UserId,
@@ -75,6 +80,9 @@ func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveE
 		request.IdempotencyKey,
 		event.MaxReservePerUser,
 	)
+	if isCapped {
+		s.Repositories.ReservationRepository.BlockEvent(ctx, request.EventId)
+	}
 	if err != nil {
 		if errors.Is(err, reservations.ErrInsufficientCapacity) ||
 			errors.Is(err, reservations.ErrExceedMaxReserveQuantity) {

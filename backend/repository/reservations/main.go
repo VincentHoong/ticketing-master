@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru/v2"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 )
@@ -44,11 +45,15 @@ type IReservationRepository interface {
 	GetReservation(ctx context.Context, id string) (*ReservationItem, error)
 	GetReservationByIdempotencyKey(ctx context.Context, eventId string, userId string, idempotencyKey string) (*ReservationItem, error)
 	SetReservationByIdempotencyKey(ctx context.Context, eventId string, userId string, idempotencyKey string, reservationItem *ReservationItem) error
-	ReserveEvent(ctx context.Context, eventId string, userId string, quantity uint32, idempotencyKey *string, maxReservePerUser uint32) (*ReservationItem, error)
+	ReserveEvent(ctx context.Context, eventId string, userId string, quantity uint32, idempotencyKey *string, maxReservePerUser uint32) (*ReservationItem, bool, error)
 	ConfirmReservation(ctx context.Context, userId string, reservationId string) error
 	ReleaseReservation(ctx context.Context, userId string, reservationId string) error
 	RefreshEventStatus(ctx context.Context) error
 	GetTotalReserved(ctx context.Context, eventId string) (int64, error)
+	BlockEvent(ctx context.Context, eventId string) (evicted bool)
+	UnblockEvent(ctx context.Context, eventId string) (evicted bool)
+	IsBlockEvent(ctx context.Context, eventId string) bool
+	ClearBlockedEvents()
 }
 
 type ReservationRepository struct {
@@ -56,17 +61,23 @@ type ReservationRepository struct {
 	RemoteCacheRepository      *RemoteCacheReservationRepository
 	stopRefreshEventStatusChan chan bool
 	stopRefreshEventStatusOnce sync.Once
+	eventFullyBookedLRU        *lru.Cache[string, bool]
 }
 
-func NewReservationRepository(dbpool *pgxpool.Pool, rdb *redis.Client) IReservationRepository {
+func NewReservationRepository(dbpool *pgxpool.Pool, rdb *redis.Client) (IReservationRepository, error) {
+	lruCache, err := lru.New[string, bool](128)
+	if err != nil {
+		return nil, err
+	}
 	r := &ReservationRepository{
 		PostgresRepository:         newPostgresReservationRepository(dbpool),
 		RemoteCacheRepository:      newRemoteCacheReservationRepository(rdb),
 		stopRefreshEventStatusChan: make(chan bool),
+		eventFullyBookedLRU:        lruCache,
 	}
 	r.startRefreshEventStatusTicker()
 
-	return r
+	return r, nil
 }
 
 func (r *ReservationRepository) Close() {
@@ -89,12 +100,12 @@ func (r *ReservationRepository) SetReservationByIdempotencyKey(ctx context.Conte
 	return r.RemoteCacheRepository.SetReservationByIdempotencyKey(ctx, eventId, userId, idempotencyKey, reservationItem)
 }
 
-func (r *ReservationRepository) ReserveEvent(ctx context.Context, eventId string, userId string, quantity uint32, idempotencyKey *string, maxReservePerUser uint32) (*ReservationItem, error) {
-	reservationItem, err := r.PostgresRepository.ReserveEvent(ctx, eventId, userId, quantity, idempotencyKey)
+func (r *ReservationRepository) ReserveEvent(ctx context.Context, eventId string, userId string, quantity uint32, idempotencyKey *string, maxReservePerUser uint32) (*ReservationItem, bool, error) {
+	reservationItem, isCapped, err := r.PostgresRepository.ReserveEvent(ctx, eventId, userId, quantity, idempotencyKey)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return reservationItem, nil
+	return reservationItem, isCapped, nil
 }
 
 func (r *ReservationRepository) GetTotalReserved(ctx context.Context, eventId string) (int64, error) {
@@ -155,4 +166,20 @@ func (r *ReservationRepository) RefreshEventStatus(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (r *ReservationRepository) BlockEvent(ctx context.Context, eventId string) (evicted bool) {
+	return r.eventFullyBookedLRU.Add(eventId, true)
+}
+
+func (r *ReservationRepository) UnblockEvent(ctx context.Context, eventId string) (evicted bool) {
+	return r.eventFullyBookedLRU.Remove(eventId)
+}
+
+func (r *ReservationRepository) IsBlockEvent(ctx context.Context, eventId string) bool {
+	return r.eventFullyBookedLRU.Contains(eventId)
+}
+
+func (r *ReservationRepository) ClearBlockedEvents() {
+	r.eventFullyBookedLRU.Purge()
 }
