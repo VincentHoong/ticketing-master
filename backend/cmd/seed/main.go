@@ -21,6 +21,7 @@ import (
 	"sort"
 	"strings"
 	"ticketing-master/config"
+	"ticketing-master/logging"
 	"ticketing-master/repository"
 )
 
@@ -50,7 +51,7 @@ func run(ctx context.Context) error {
 		return nil
 	}
 
-	repos, err := repository.NewRepositories(ctx, cfg)
+	repos, err := repository.NewRepositories(ctx, cfg, logging.New(cfg.LogLevel))
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}

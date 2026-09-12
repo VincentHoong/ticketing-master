@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"ticketing-master/config"
+	"ticketing-master/logging"
 	"ticketing-master/repository"
 	"ticketing-master/service"
 	"ticketing-master/simulation"
@@ -45,7 +46,7 @@ func run() error {
 	}
 
 	ctx := context.Background()
-	repositories, err := repository.NewRepositories(ctx, cfg)
+	repositories, err := repository.NewRepositories(ctx, cfg, logging.New(cfg.LogLevel))
 	if err != nil {
 		return err
 	}

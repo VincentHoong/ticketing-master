@@ -3,7 +3,7 @@ package reservations
 import (
 	"context"
 	"errors"
-	"log"
+	"ticketing-master/logging"
 	"ticketing-master/repository"
 	"ticketing-master/repository/reservations"
 	"ticketing-master/repository/virtualqueues"
@@ -52,12 +52,12 @@ func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveE
 	}
 
 	if request.IdempotencyKey != nil {
-		reservationItem, _ := s.Repositories.ReservationRepository.GetReservationByIdempotencyKey(ctx, request.EventId, request.UserId, *request.IdempotencyKey)
-		if reservationItem != nil {
-			if reservationItem.Quantity != request.Quantity {
+		cached, _ := s.Repositories.ReservationRepository.GetReservationByIdempotencyKey(ctx, request.EventId, request.UserId, *request.IdempotencyKey)
+		if cached != nil {
+			if cached.Quantity != request.Quantity {
 				return nil, ErrIdempotencyKeyReused
 			}
-			return reservationItem, nil
+			return cached, nil
 		}
 	}
 	whitelistTTL, err := s.Repositories.VirtualQueueRepository.GetWhitelistedUserTTL(ctx, request.EventId, request.UserId)
@@ -94,7 +94,7 @@ func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveE
 	if reservationItem.IdempotencyKey != nil {
 		err := s.Repositories.ReservationRepository.SetReservationByIdempotencyKey(ctx, request.EventId, request.UserId, *reservationItem.IdempotencyKey, reservationItem)
 		if err != nil {
-			log.Printf("failed to cache reservation %v", err)
+			logging.FromContext(ctx).Error("failed to cache reservation", "error", err)
 		}
 	}
 
@@ -104,12 +104,13 @@ func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveE
 }
 
 func (s *ReservationService) releaseQueueSlot(ctx context.Context, eventId string, userId string) {
+	logger := logging.FromContext(ctx)
 	if _, err := s.Repositories.VirtualQueueRepository.DeleteWhitelistedUserTTL(ctx, eventId, userId); err != nil &&
 		!errors.Is(err, virtualqueues.ErrMissingWhitelistKey) {
-		log.Printf("failed to release whitelist slot for user %s on event %s: %v", userId, eventId, err)
+		logger.Error("failed to release whitelist slot", "user_id", userId, "event_id", eventId, "error", err)
 	}
 	if _, err := s.Repositories.VirtualQueueRepository.TryWhitelistEventQueue(ctx, eventId, 1); err != nil {
-		log.Printf("failed to admit next user for event %s: %v", eventId, err)
+		logger.Error("failed to admit next user", "event_id", eventId, "error", err)
 	}
 }
 

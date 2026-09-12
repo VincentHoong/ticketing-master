@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"ticketing-master/config"
 	"ticketing-master/handler"
+	"ticketing-master/logging"
 	"ticketing-master/repository"
 	"ticketing-master/service"
 	"time"
@@ -22,7 +23,11 @@ func run() error {
 		return err
 	}
 
-	repositories, err := repository.NewRepositories(context.Background(), cfg)
+	logger := logging.New(cfg.LogLevel)
+	slog.SetDefault(logger)
+
+	ctx := logging.WithContext(context.Background(), logger)
+	repositories, err := repository.NewRepositories(ctx, cfg, logger)
 	if err != nil {
 		return err
 	}
@@ -30,9 +35,9 @@ func run() error {
 
 	services := service.NewServices(repositories)
 
-	r := handler.NewHandler(cfg, services, repositories)
+	r := handler.NewHandler(cfg, services, repositories, logger)
 
-	srv := newServer(cfg, r)
+	srv := newServer(cfg, r, logger)
 	serverErr := make(chan error, 1)
 	go func() {
 		err := srv.ListenAndServe()
@@ -41,15 +46,15 @@ func run() error {
 		}
 	}()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	stopCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	select {
 	case err := <-serverErr:
 		return err
-	case <-ctx.Done():
+	case <-stopCtx.Done():
 	}
 
-	log.Println("shutting down")
+	logger.Info("shutting down")
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -58,8 +63,8 @@ func run() error {
 	return nil
 }
 
-func newServer(cfg *config.Config, r *chi.Mux) *http.Server {
-	log.Printf("Server starting on :%s", cfg.Port)
+func newServer(cfg *config.Config, r *chi.Mux, logger *slog.Logger) *http.Server {
+	logger.Info("server starting", "port", cfg.Port)
 	return &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
@@ -71,6 +76,7 @@ func newServer(cfg *config.Config, r *chi.Mux) *http.Server {
 
 func main() {
 	if err := run(); err != nil {
-		log.Fatal(err)
+		slog.Error("fatal", "error", err)
+		os.Exit(1)
 	}
 }

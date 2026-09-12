@@ -3,11 +3,11 @@ package users
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"time"
 
 	"ticketing-master/handler/utils"
+	"ticketing-master/logging"
 	userRepo "ticketing-master/repository/users"
 	"ticketing-master/service/users"
 
@@ -33,10 +33,10 @@ func (h *UserHandler) createUserHandler(requestTimeout time.Duration) {
 				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
 			case errors.Is(err, context.DeadlineExceeded):
 				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
-				log.Printf("request timed out: %v", err)
+				logging.FromContext(r.Context()).Warn("request timed out", "error", err)
 			default:
 				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
-				log.Printf("unexpected error: %v", err)
+				logging.FromContext(r.Context()).Error("unexpected error", "error", err)
 			}
 			return
 		}

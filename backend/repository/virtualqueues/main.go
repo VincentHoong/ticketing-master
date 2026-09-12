@@ -2,9 +2,10 @@ package virtualqueues
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 	"ticketing-master/config"
+	"ticketing-master/logging"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -16,6 +17,7 @@ type VirtualQueueRepository struct {
 	maxConcurrentQueue    uint64
 	promoteInterval       time.Duration
 	RemoteCacheRepository *RemoteCacheVirtualQueueRepository
+	logger                *slog.Logger
 	stopPromoterChan      chan bool
 	stopPromoterOnce      sync.Once
 }
@@ -38,11 +40,12 @@ type IVirtualQueueRepository interface {
 	GetEventMaxConcurrent(ctx context.Context, eventId string) (uint64, error)
 }
 
-func NewVirtualQueueRepository(rdb *redis.Client, cfg *config.Config) IVirtualQueueRepository {
+func NewVirtualQueueRepository(rdb *redis.Client, cfg *config.Config, logger *slog.Logger) IVirtualQueueRepository {
 	r := &VirtualQueueRepository{
 		maxConcurrentQueue:    cfg.MaxConcurrentQueue,
 		promoteInterval:       cfg.PromoteInterval,
 		RemoteCacheRepository: newRemoteCacheVirtualQueueRepository(rdb, cfg.WhitelistTTL, cfg.HeartbeatTTL, cfg.QueueTTL),
+		logger:                logger,
 		stopPromoterChan:      make(chan bool),
 	}
 
@@ -53,7 +56,7 @@ func NewVirtualQueueRepository(rdb *redis.Client, cfg *config.Config) IVirtualQu
 
 func (r *VirtualQueueRepository) startPromoterTicker() {
 	ticker := time.NewTicker(r.promoteInterval)
-	log.Print("starting virtual queue promoter ticker")
+	r.logger.Info("starting virtual queue promoter ticker")
 
 	go func() {
 		defer ticker.Stop()
@@ -63,9 +66,9 @@ func (r *VirtualQueueRepository) startPromoterTicker() {
 			case <-r.stopPromoterChan:
 				return
 			case <-ticker.C:
-				tickCtx, tickCancel := context.WithTimeout(context.Background(), promoteTickTimeout)
+				tickCtx, tickCancel := context.WithTimeout(logging.WithContext(context.Background(), r.logger), promoteTickTimeout)
 				if err := r.PromoteActiveEvents(tickCtx); err != nil {
-					log.Printf("virtual queue promoter: %v", err)
+					r.logger.Error("virtual queue promoter", "error", err)
 				}
 				tickCancel()
 			}
@@ -75,7 +78,7 @@ func (r *VirtualQueueRepository) startPromoterTicker() {
 
 func (r *VirtualQueueRepository) Close() {
 	r.stopPromoterOnce.Do(func() {
-		log.Print("stopping virtual queue promoter ticker")
+		r.logger.Info("stopping virtual queue promoter ticker")
 		r.stopPromoterChan <- true
 	})
 }
@@ -86,28 +89,29 @@ func (r *VirtualQueueRepository) PromoteActiveEvents(ctx context.Context) error 
 		return err
 	}
 
+	logger := logging.FromContext(ctx)
 	for _, eventId := range eventIds {
 		queued, err := r.GetTotalVirtualQueue(ctx, eventId)
 		if err != nil {
-			log.Printf("virtual queue promoter: queue size for event %s: %v", eventId, err)
+			logger.Error("virtual queue promoter: queue size", "event_id", eventId, "error", err)
 			continue
 		}
 		if queued == 0 {
 			if _, err := r.RemoteCacheRepository.UntrackIdleEvent(ctx, eventId); err != nil {
-				log.Printf("virtual queue promoter: untrack event %s: %v", eventId, err)
+				logger.Error("virtual queue promoter: untrack event", "event_id", eventId, "error", err)
 			}
 			continue
 		}
 
 		whitelisted, err := r.GetTotalEventWhitelist(ctx, eventId)
 		if err != nil {
-			log.Printf("virtual queue promoter: whitelist size for event %s: %v", eventId, err)
+			logger.Error("virtual queue promoter: whitelist size", "event_id", eventId, "error", err)
 			continue
 		}
 
 		maxConcurrent, err := r.RemoteCacheRepository.GetEventMaxConcurrent(ctx, eventId, r.maxConcurrentQueue)
 		if err != nil {
-			log.Printf("virtual queue promoter: cap for event %s: %v", eventId, err)
+			logger.Error("virtual queue promoter: cap", "event_id", eventId, "error", err)
 			continue
 		}
 
@@ -120,7 +124,7 @@ func (r *VirtualQueueRepository) PromoteActiveEvents(ctx context.Context) error 
 		}
 
 		if _, err := r.TryWhitelistEventQueue(ctx, eventId, uint64(free)); err != nil {
-			log.Printf("virtual queue promoter: admit for event %s: %v", eventId, err)
+			logger.Error("virtual queue promoter: admit", "event_id", eventId, "error", err)
 		}
 	}
 

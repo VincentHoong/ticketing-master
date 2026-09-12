@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"ticketing-master/handler/utils"
+	"ticketing-master/logging"
 	"ticketing-master/simulation"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -71,10 +71,10 @@ func (h *AdminHandler) resetHandler(requestTimeout time.Duration) {
 				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
 			case errors.Is(err, context.DeadlineExceeded):
 				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
-				log.Printf("request timed out: %v", err)
+				logging.FromContext(r.Context()).Warn("request timed out", "error", err)
 			default:
 				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
-				log.Printf("reset: %v", err)
+				logging.FromContext(r.Context()).Error("reset failed", "error", err)
 			}
 			return
 		}
@@ -129,7 +129,7 @@ func (h *AdminHandler) reset(ctx context.Context, scope ResetScope) (*ResetRespo
 	h.Repositories.ReservationRepository.ClearBlockedEvents()
 
 	if err := h.Repositories.Rdb.FlushDB(ctx).Err(); err != nil {
-		log.Printf("reset: flush redis: %v", err)
+		logging.FromContext(ctx).Error("reset: flush redis", "error", err)
 		return response, nil
 	}
 	response.RedisFlushed = true

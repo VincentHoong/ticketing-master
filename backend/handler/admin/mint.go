@@ -2,12 +2,12 @@ package admin
 
 import (
 	"fmt"
-	"log"
 	"math/rand"
 	"net/http"
 	"time"
 
 	"ticketing-master/handler/utils"
+	"ticketing-master/logging"
 	eventRepo "ticketing-master/repository/events"
 	userRepo "ticketing-master/repository/users"
 
@@ -76,7 +76,7 @@ func (h *AdminHandler) mintUsersHandler(requestTimeout time.Duration) {
 		userIds, err := h.Repositories.UserRepository.CreateUsers(r.Context(), newUsers)
 		if err != nil {
 			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
-			log.Printf("mint users: %v", err)
+			logging.FromContext(r.Context()).Error("mint users failed", "error", err)
 			return
 		}
 
@@ -126,7 +126,7 @@ func (h *AdminHandler) mintEventsHandler(requestTimeout time.Duration) {
 		created, err := h.Repositories.EventRepository.CreateEvents(r.Context(), newEvents)
 		if err != nil {
 			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
-			log.Printf("mint events: %v", err)
+			logging.FromContext(r.Context()).Error("mint events failed", "error", err)
 			return
 		}
 		if created == nil {

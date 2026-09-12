@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"ticketing-master/config"
 	"ticketing-master/repository/events"
 	"ticketing-master/repository/reservations"
@@ -22,18 +22,19 @@ type Repositories struct {
 	VirtualQueueRepository virtualqueues.IVirtualQueueRepository
 	DbPool                 *pgxpool.Pool
 	Rdb                    *redis.Client
+	logger                 *slog.Logger
 }
 
-func NewRepositories(ctx context.Context, cfg *config.Config) (*Repositories, error) {
-	dbpool, err := newPostgresConnection(ctx, cfg)
+func NewRepositories(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*Repositories, error) {
+	dbpool, err := newPostgresConnection(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
 	}
-	rdb, err := newRedisConnection(ctx, cfg)
+	rdb, err := newRedisConnection(ctx, cfg, logger)
 	if err != nil {
 		return nil, err
 	}
-	reservationRepository, err := reservations.NewReservationRepository(dbpool, rdb)
+	reservationRepository, err := reservations.NewReservationRepository(dbpool, rdb, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -42,24 +43,25 @@ func NewRepositories(ctx context.Context, cfg *config.Config) (*Repositories, er
 		EventRepository:        events.NewEventRepository(dbpool, rdb),
 		ReservationRepository:  reservationRepository,
 		UserRepository:         users.NewUserRepository(dbpool, rdb),
-		VirtualQueueRepository: virtualqueues.NewVirtualQueueRepository(rdb, cfg),
+		VirtualQueueRepository: virtualqueues.NewVirtualQueueRepository(rdb, cfg, logger),
 		DbPool:                 dbpool,
 		Rdb:                    rdb,
+		logger:                 logger,
 	}, nil
 }
 
 func (r *Repositories) Close() {
 	r.VirtualQueueRepository.Close()
 	r.ReservationRepository.Close()
-	log.Println("disconnecting postgresql")
+	r.logger.Info("disconnecting postgresql")
 	r.DbPool.Close()
-	log.Println("disconnecting redis")
+	r.logger.Info("disconnecting redis")
 	if err := r.Rdb.Close(); err != nil {
-		log.Printf("failed to disconnect redis: %v", err)
+		r.logger.Error("failed to disconnect redis", "error", err)
 	}
 }
 
-func newPostgresConnection(ctx context.Context, cfg *config.Config) (*pgxpool.Pool, error) {
+func newPostgresConnection(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*pgxpool.Pool, error) {
 	poolCfg, err := newPostgresConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -75,7 +77,7 @@ func newPostgresConnection(ctx context.Context, cfg *config.Config) (*pgxpool.Po
 	if err := dbpool.Ping(pingCtx); err != nil {
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
-	log.Println("successfully connected to postgresql!")
+	logger.Info("successfully connected to postgresql")
 
 	return dbpool, nil
 }
@@ -94,7 +96,7 @@ func newPostgresConfig(cfg *config.Config) (*pgxpool.Config, error) {
 	return poolCfg, nil
 }
 
-func newRedisConnection(ctx context.Context, cfg *config.Config) (*redis.Client, error) {
+func newRedisConnection(ctx context.Context, cfg *config.Config, logger *slog.Logger) (*redis.Client, error) {
 	redisCfg, err := newRedisConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -106,7 +108,7 @@ func newRedisConnection(ctx context.Context, cfg *config.Config) (*redis.Client,
 	if _, err := rdb.Ping(pingCtx).Result(); err != nil {
 		return nil, fmt.Errorf("unable to ping redis: %w", err)
 	}
-	log.Println("successfully connected to redis!")
+	logger.Info("successfully connected to redis")
 
 	return rdb, nil
 }

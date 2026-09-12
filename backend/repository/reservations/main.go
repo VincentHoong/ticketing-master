@@ -3,8 +3,9 @@ package reservations
 import (
 	"context"
 	"errors"
-	"log"
+	"log/slog"
 	"sync"
+	"ticketing-master/logging"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -59,11 +60,12 @@ type ReservationRepository struct {
 	PostgresRepository         *PostgresReservationRepository
 	RemoteCacheRepository      *RemoteCacheReservationRepository
 	LRURepository              *LRUReservationRepository
+	logger                     *slog.Logger
 	stopRefreshEventStatusChan chan bool
 	stopRefreshEventStatusOnce sync.Once
 }
 
-func NewReservationRepository(dbpool *pgxpool.Pool, rdb *redis.Client) (IReservationRepository, error) {
+func NewReservationRepository(dbpool *pgxpool.Pool, rdb *redis.Client, logger *slog.Logger) (IReservationRepository, error) {
 	lruRepository, err := newLRUReservationRepository()
 	if err != nil {
 		return nil, err
@@ -73,6 +75,7 @@ func NewReservationRepository(dbpool *pgxpool.Pool, rdb *redis.Client) (IReserva
 		PostgresRepository:         newPostgresReservationRepository(dbpool),
 		RemoteCacheRepository:      newRemoteCacheReservationRepository(rdb),
 		LRURepository:              lruRepository,
+		logger:                     logger,
 		stopRefreshEventStatusChan: make(chan bool),
 	}
 	r.startRefreshEventStatusTicker()
@@ -89,11 +92,19 @@ func (r *ReservationRepository) GetReservation(ctx context.Context, id string) (
 }
 
 func (r *ReservationRepository) GetReservationByIdempotencyKey(ctx context.Context, eventId string, userId string, idempotencyKey string) (*ReservationItem, error) {
-	if cached, _ := r.RemoteCacheRepository.GetReservationByIdempotencyKey(ctx, eventId, userId, idempotencyKey); cached != nil {
+	cached, err := r.RemoteCacheRepository.GetReservationByIdempotencyKey(ctx, eventId, userId, idempotencyKey)
+
+	if cached != nil {
 		return cached, nil
+	} else if err != nil {
+		logging.FromContext(ctx).Warn("idempotency cache lookup failed, falling back to postgres", "error", err)
 	}
 
-	return r.PostgresRepository.GetReservationByIdempotencyKey(ctx, eventId, userId, idempotencyKey)
+	reservation, err := r.PostgresRepository.GetReservationByIdempotencyKey(ctx, eventId, userId, idempotencyKey)
+	if err != nil {
+		logging.FromContext(ctx).Error("idempotency key lookup failed", "error", err)
+	}
+	return reservation, err
 }
 
 func (r *ReservationRepository) SetReservationByIdempotencyKey(ctx context.Context, eventId string, userId string, idempotencyKey string, reservationItem *ReservationItem) error {
@@ -130,7 +141,7 @@ func (r *ReservationRepository) ReleaseReservation(ctx context.Context, userId s
 
 func (r *ReservationRepository) startRefreshEventStatusTicker() {
 	ticker := time.NewTicker(1 * time.Minute)
-	log.Print("starting refresh event status ticker")
+	r.logger.Info("starting refresh event status ticker")
 
 	go func() {
 		defer ticker.Stop()
@@ -140,7 +151,7 @@ func (r *ReservationRepository) startRefreshEventStatusTicker() {
 			case <-r.stopRefreshEventStatusChan:
 				return
 			case <-ticker.C:
-				tickCtx, tickCancel := context.WithTimeout(context.Background(), 5*time.Minute)
+				tickCtx, tickCancel := context.WithTimeout(logging.WithContext(context.Background(), r.logger), 5*time.Minute)
 				r.RefreshEventStatus(tickCtx)
 				tickCancel()
 			}
@@ -150,7 +161,7 @@ func (r *ReservationRepository) startRefreshEventStatusTicker() {
 
 func (r *ReservationRepository) stopRefreshEventStatusTicker() {
 	r.stopRefreshEventStatusOnce.Do(func() {
-		log.Print("stopping refresh event status ticker")
+		r.logger.Info("stopping refresh event status ticker")
 		r.stopRefreshEventStatusChan <- true
 	})
 }
@@ -178,7 +189,7 @@ func (r *ReservationRepository) RefreshEventStatus(ctx context.Context) error {
 		r.UnblockEvent(ctx, eventId)
 	}
 	if expired > 0 {
-		log.Printf("refresh event status: expired %d holds across %d events", expired, len(eventIds))
+		logging.FromContext(ctx).Info("refresh event status", "expired", expired, "events", len(eventIds))
 	}
 
 	return nil
@@ -188,7 +199,7 @@ func (r *ReservationRepository) BlockEvent(ctx context.Context, eventId string) 
 	evicted = r.LRURepository.BlockEvent(ctx, eventId)
 
 	if err := r.RemoteCacheRepository.BlockEvent(ctx, eventId); err != nil {
-		log.Printf("block event: redis: %v", err)
+		logging.FromContext(ctx).Error("block event: redis", "event_id", eventId, "error", err)
 	}
 
 	return evicted
@@ -198,7 +209,7 @@ func (r *ReservationRepository) UnblockEvent(ctx context.Context, eventId string
 	evicted = r.LRURepository.UnblockEvent(ctx, eventId)
 
 	if err := r.RemoteCacheRepository.UnblockEvent(ctx, eventId); err != nil {
-		log.Printf("unblock event: redis: %v", err)
+		logging.FromContext(ctx).Error("unblock event: redis", "event_id", eventId, "error", err)
 	}
 
 	return evicted
@@ -211,7 +222,7 @@ func (r *ReservationRepository) IsBlockEvent(ctx context.Context, eventId string
 
 	blocked, err := r.RemoteCacheRepository.IsBlockEvent(ctx, eventId)
 	if err != nil {
-		log.Printf("is block event: redis: %v", err)
+		logging.FromContext(ctx).Error("is block event: redis", "event_id", eventId, "error", err)
 		return false
 	}
 

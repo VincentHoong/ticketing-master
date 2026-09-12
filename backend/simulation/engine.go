@@ -3,13 +3,13 @@ package simulation
 import (
 	"context"
 	"errors"
-	"log"
 	"math/rand"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"ticketing-master/logging"
 	"ticketing-master/repository"
 	reservationRepo "ticketing-master/repository/reservations"
 	"ticketing-master/service"
@@ -293,7 +293,7 @@ func (r *Runner) waitForAdmission(ctx context.Context, userId string) bool {
 
 func (r *Runner) releaseSlot(ctx context.Context, userId string) {
 	if err := r.client.ReleaseSlot(ctx, userId); err != nil && ctx.Err() == nil {
-		log.Printf("simulation: release slot %s: %v", userId, err)
+		logging.FromContext(ctx).Error("simulation: release slot failed", "user_id", userId, "error", err)
 	}
 }
 

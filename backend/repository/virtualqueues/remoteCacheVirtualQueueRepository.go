@@ -3,7 +3,7 @@ package virtualqueues
 import (
 	"context"
 	"errors"
-	"log"
+	"ticketing-master/logging"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -96,7 +96,8 @@ func (r *RemoteCacheVirtualQueueRepository) GetEventMaxConcurrent(ctx context.Co
 		return fallback, nil
 	}
 	if err != nil {
-		log.Printf("unreadable max_concurrent override for event %s, using %d: %v", eventId, fallback, err)
+		logging.FromContext(ctx).Warn("unreadable max_concurrent override, using fallback",
+			"event_id", eventId, "fallback", fallback, "error", err)
 		return fallback, nil
 	}
 	return val, nil
@@ -138,7 +139,7 @@ func (r *RemoteCacheVirtualQueueRepository) Enqueue(ctx context.Context, eventId
 	}
 
 	if err := r.TrackActiveEvent(ctx, eventId); err != nil {
-		log.Printf("failed to track active event %s: %v", eventId, err)
+		logging.FromContext(ctx).Error("failed to track active event", "event_id", eventId, "error", err)
 	}
 
 	if affected < 0 {

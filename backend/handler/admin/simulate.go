@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"ticketing-master/handler/utils"
+	"ticketing-master/logging"
 	userRepo "ticketing-master/repository/users"
 	"ticketing-master/simulation"
 
@@ -117,7 +117,7 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 		userIds, err := h.mintSimUsers(r, req.Users)
 		if err != nil {
 			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
-			log.Printf("simulate: mint users: %v", err)
+			logging.FromContext(r.Context()).Error("simulate: mint users failed", "error", err)
 			return
 		}
 

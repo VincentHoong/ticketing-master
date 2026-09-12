@@ -12,6 +12,7 @@ import (
 
 type Config struct {
 	Port               string
+	LogLevel           string
 	JwtSecret          string
 	PostgreSQLUrl      string
 	RedisUrl           string
@@ -30,6 +31,7 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Port:               getEnv("PORT", "8000"),
+		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		JwtSecret:          getEnv("JWT_SECRET", ""),
 		PostgreSQLUrl:      getEnv("POSTGRESQL_URL", ""),
 		RedisUrl:           getEnv("REDIS_URL", ""),

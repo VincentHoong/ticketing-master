@@ -23,6 +23,10 @@ type UserDto struct {
 	UpdatedAt *time.Time `json:"updatedAt"`
 }
 
+func (u *UserDto) AuthID() string {
+	return u.Id
+}
+
 func (u *UserDto) toDto(userItem *userRepo.UserItem) *UserDto {
 	return &UserDto{
 		Id:        userItem.Id,

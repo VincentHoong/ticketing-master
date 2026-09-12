@@ -3,9 +3,9 @@ package events
 import (
 	"context"
 	"errors"
-	"log"
 	"net/http"
 	"ticketing-master/handler/utils"
+	"ticketing-master/logging"
 	"ticketing-master/repository/events"
 	"time"
 
@@ -26,10 +26,10 @@ func (h *EventHandler) getEventHandler(requestTimeout time.Duration) {
 				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
 			case errors.Is(err, context.DeadlineExceeded):
 				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
-				log.Printf("request timed out: %v", err)
+				logging.FromContext(r.Context()).Warn("request timed out", "error", err)
 			default:
 				utils.WriteJSONResponse(w, http.StatusInternalServerError, nil)
-				log.Printf("unexpected error: %v", err)
+				logging.FromContext(r.Context()).Error("unexpected error", "error", err)
 			}
 			return
 		}

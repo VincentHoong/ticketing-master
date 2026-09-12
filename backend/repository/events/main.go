@@ -3,7 +3,7 @@ package events
 import (
 	"context"
 	"errors"
-	"log"
+	"ticketing-master/logging"
 	"ticketing-master/repository/utils"
 	"time"
 
@@ -88,11 +88,12 @@ func (e *EventRepository) GetEvent(ctx context.Context, id string) (*EventItem, 
 			return nil, err
 		}
 
+		logger := logging.FromContext(ctx)
 		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			cacheCtx, cancel := context.WithTimeout(logging.WithContext(context.Background(), logger), 2*time.Second)
 			defer cancel()
-			if err := e.RemoteCacheRepository.SetCache(ctx, eventItem); err != nil {
-				log.Printf("cache write failed for event %s: %v", id, err)
+			if err := e.RemoteCacheRepository.SetCache(cacheCtx, eventItem); err != nil {
+				logger.Error("cache write failed", "event_id", id, "error", err)
 			}
 		}()
 		return eventItem, nil

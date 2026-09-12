@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"ticketing-master/handler/utils"
+	"ticketing-master/logging"
 )
 
 type ctxKey string
@@ -12,6 +13,10 @@ const userCtxKey ctxKey = "user"
 
 type Authenticator[T any] interface {
 	GetAuthenticatedUser(r *http.Request) (T, error)
+}
+
+type identifiable interface {
+	AuthID() string
 }
 
 func RequireAuth[T any](a Authenticator[T]) func(next http.Handler) http.Handler {
@@ -23,6 +28,9 @@ func RequireAuth[T any](a Authenticator[T]) func(next http.Handler) http.Handler
 				return
 			}
 			ctx := context.WithValue(r.Context(), userCtxKey, user)
+			if id, ok := any(user).(identifiable); ok {
+				ctx = logging.WithContext(ctx, logging.FromContext(ctx).With("user_id", id.AuthID()))
+			}
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

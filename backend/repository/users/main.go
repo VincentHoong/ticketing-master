@@ -3,7 +3,7 @@ package users
 import (
 	"context"
 	"errors"
-	"log"
+	"ticketing-master/logging"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -58,7 +58,7 @@ func (e *UserRepository) GetUser(ctx context.Context, id string) (*UserItem, err
 	}
 
 	if err := e.RemoteCacheRepository.SetUser(ctx, userItem); err != nil {
-		log.Printf("get user: cache set: %v", err)
+		logging.FromContext(ctx).Error("get user: cache set", "user_id", id, "error", err)
 	}
 
 	return userItem, nil

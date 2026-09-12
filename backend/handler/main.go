@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"log"
+	"log/slog"
 	"ticketing-master/config"
 	"ticketing-master/handler/admin"
 	"ticketing-master/handler/events"
@@ -9,6 +9,7 @@ import (
 	"ticketing-master/handler/reservations"
 	"ticketing-master/handler/users"
 	"ticketing-master/handler/virtualqueues"
+	appmiddleware "ticketing-master/middleware"
 	"ticketing-master/repository"
 	"ticketing-master/service"
 
@@ -17,10 +18,11 @@ import (
 	"github.com/go-chi/cors"
 )
 
-func NewHandler(cfg *config.Config, services *service.Services, repositories *repository.Repositories) *chi.Mux {
+func NewHandler(cfg *config.Config, services *service.Services, repositories *repository.Repositories, logger *slog.Logger) *chi.Mux {
 	r := chi.NewRouter()
 	r.Use(
-		middleware.Logger,
+		middleware.RequestID,
+		appmiddleware.RequestLogger(logger),
 		middleware.Recoverer,
 		cors.Handler(cors.Options{
 			// AllowedOrigins:   []string{"https://foo.com"}, // Use this to allow specific origin hosts
@@ -41,7 +43,7 @@ func NewHandler(cfg *config.Config, services *service.Services, repositories *re
 	virtualqueues.NewHandler(r, services.VirtualQueueService, u)
 
 	if cfg.DemoMode {
-		log.Print("DEMO_MODE enabled: registering /admin routes")
+		logger.Warn("DEMO_MODE enabled: registering /admin routes")
 		admin.NewHandler(r, services, repositories, cfg.JwtSecret, cfg.Port)
 	}
 
