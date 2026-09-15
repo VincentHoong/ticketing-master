@@ -121,11 +121,9 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 		return nil, isCapped, ErrInsufficientCapacity
 	}
 
-	var id string
-	var status ReservationStatus
 	reservedAt := time.Now()
 	expiresAt := reservedAt.Add(reservationTTL)
-	err = tx.QueryRow(ctx, `
+	pgRows, err := tx.Query(ctx, `
 		INSERT INTO reservations (
 			event_id,
 			user_id,
@@ -141,9 +139,15 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 			$5,
 			$6
 		)
-		RETURNING id, status;
-	`, eventId, userId, quantity, idempotencyKey, reservedAt, expiresAt).Scan(&id, &status)
+		ON CONFLICT (event_id, user_id, idempotency_key) WHERE idempotency_key IS NOT NULL
+		DO UPDATE SET idempotency_key = EXCLUDED.idempotency_key
+		RETURNING id, user_id, event_id, quantity, status, idempotency_key, reserved_at, expires_at, confirmed_at, released_at, created_at, updated_at;
+	`, eventId, userId, quantity, idempotencyKey, reservedAt, expiresAt)
+	if err != nil {
+		return nil, isCapped, err
+	}
 
+	reservationItem, err := pgx.CollectExactlyOneRow(pgRows, pgx.RowToStructByName[ReservationItem])
 	if err != nil {
 		return nil, isCapped, err
 	}
@@ -154,18 +158,7 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 	}
 
 	isCapped = dbActiveReserved+quantity >= dbCapacity
-	return &ReservationItem{
-		Id:             id,
-		EventId:        eventId,
-		UserId:         userId,
-		Quantity:       quantity,
-		Status:         status,
-		IdempotencyKey: idempotencyKey,
-		ReservedAt:     &reservedAt,
-		ExpiresAt:      &expiresAt,
-		CreatedAt:      &reservedAt,
-		UpdatedAt:      &reservedAt,
-	}, isCapped, nil
+	return &reservationItem, isCapped, nil
 }
 
 func (r *PostgresReservationRepository) UpdateReservation(ctx context.Context, userId string, reservationId string, status ReservationStatus) (string, error) {

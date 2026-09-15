@@ -193,3 +193,58 @@ func TestRace_ConcurrentReserveAndReleaseNoDoubleBooking(t *testing.T) {
 		}
 	}
 }
+
+// TestRace_ConcurrentIdempotentReserveReturnsSameReservation exercises the repository
+// directly (bypassing the service layer's pre-check, which is what actually races) to
+// prove the unique-constraint fallback: two callers sharing an idempotency key must both
+// get back the *same* reservation, not one success and one raw constraint error.
+func TestRace_ConcurrentIdempotentReserveReturnsSameReservation(t *testing.T) {
+	const contenders = 20
+
+	repos := newTestRepositories(t)
+	resetState(t, repos)
+	ctx := newTestCtx(t)
+
+	event := createTestEvent(t, repos, 100, 100)
+	userId := createTestUser(t, repos)
+	key := "shared-key"
+
+	var wg sync.WaitGroup
+	results := make(chan struct {
+		item *reservations.ReservationItem
+		err  error
+	}, contenders)
+	for i := 0; i < contenders; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			item, _, err := repos.ReservationRepository.ReserveEvent(ctx, event.Id, userId, 1, &key, event.MaxReservePerUser)
+			results <- struct {
+				item *reservations.ReservationItem
+				err  error
+			}{item, err}
+		}()
+	}
+	wg.Wait()
+	close(results)
+
+	var firstId string
+	for r := range results {
+		if r.err != nil {
+			t.Fatalf("expected every concurrent idempotent request to succeed, got: %v", r.err)
+		}
+		if firstId == "" {
+			firstId = r.item.Id
+		} else if r.item.Id != firstId {
+			t.Fatalf("expected all concurrent requests to resolve to the same reservation id, got %q and %q", firstId, r.item.Id)
+		}
+	}
+
+	total, err := repos.ReservationRepository.GetTotalReserved(ctx, event.Id)
+	if err != nil {
+		t.Fatalf("get total reserved: %v", err)
+	}
+	if total != 1 {
+		t.Fatalf("expected exactly 1 reservation despite %d concurrent identical requests, got total=%d", contenders, total)
+	}
+}
