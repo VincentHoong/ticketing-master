@@ -52,7 +52,10 @@ func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveE
 	}
 
 	if request.IdempotencyKey != nil {
-		cached, _ := s.Repositories.ReservationRepository.GetReservationByIdempotencyKey(ctx, request.EventId, request.UserId, *request.IdempotencyKey)
+		cached, err := s.Repositories.ReservationRepository.GetReservationByIdempotencyKey(ctx, request.EventId, request.UserId, *request.IdempotencyKey)
+		if err != nil && !errors.Is(err, reservations.ErrReservationNotFound) {
+			return nil, err
+		}
 		if cached != nil {
 			if cached.Quantity != request.Quantity {
 				return nil, ErrIdempotencyKeyReused
@@ -85,6 +88,10 @@ func (s *ReservationService) ReserveEvent(ctx context.Context, request *ReserveE
 		s.Repositories.ReservationRepository.BlockEvent(ctx, request.EventId)
 	}
 	if err != nil {
+		// Only release the queue slot on a definitive business outcome (capacity/quota
+		// exhausted). Any other error is assumed transient: keep the slot so the caller can
+		// retry without losing their place in line. Worst case it sits idle until
+		// WHITELIST_TTL, which is far cheaper than forcing a re-enqueue behind everyone else.
 		if errors.Is(err, reservations.ErrInsufficientCapacity) ||
 			errors.Is(err, reservations.ErrExceedMaxReserveQuantity) {
 			s.releaseQueueSlot(ctx, request.EventId, request.UserId)

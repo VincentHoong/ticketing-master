@@ -77,6 +77,9 @@ type Snapshot struct {
 	ReserveP50Ms     float64          `json:"reserveP50Ms"`
 	ReserveP95Ms     float64          `json:"reserveP95Ms"`
 	ReserveP99Ms     float64          `json:"reserveP99Ms"`
+	RejectedP50Ms    float64          `json:"rejectedP50Ms"`
+	RejectedP95Ms    float64          `json:"rejectedP95Ms"`
+	RejectedP99Ms    float64          `json:"rejectedP99Ms"`
 	QueueWaitP50Ms   float64          `json:"queueWaitP50Ms"`
 	QueueWaitP95Ms   float64          `json:"queueWaitP95Ms"`
 	PollIntervalMs   int64            `json:"pollIntervalMs"`
@@ -111,10 +114,11 @@ type Runner struct {
 
 	reserveSem chan struct{}
 
-	mu            sync.Mutex
-	reserveSample []time.Duration
-	waitSample    []time.Duration
-	errorCounts   map[string]int64
+	mu             sync.Mutex
+	reserveSample  []time.Duration
+	rejectedSample []time.Duration
+	waitSample     []time.Duration
+	errorCounts    map[string]int64
 
 	startedAt time.Time
 	done      atomic.Bool
@@ -161,15 +165,16 @@ func NewRunner(services *service.Services, repositories *repository.Repositories
 	}
 
 	return &Runner{
-		services:      services,
-		repositories:  repositories,
-		cfg:           cfg,
-		client:        c,
-		reserveSem:    make(chan struct{}, cfg.Workers),
-		reserveSample: make([]time.Duration, 0, len(cfg.UserIds)),
-		waitSample:    make([]time.Duration, 0, len(cfg.UserIds)),
-		errorCounts:   map[string]int64{},
-		startedAt:     time.Now(),
+		services:       services,
+		repositories:   repositories,
+		cfg:            cfg,
+		client:         c,
+		reserveSem:     make(chan struct{}, cfg.Workers),
+		reserveSample:  make([]time.Duration, 0, len(cfg.UserIds)),
+		rejectedSample: make([]time.Duration, 0, len(cfg.UserIds)),
+		waitSample:     make([]time.Duration, 0, len(cfg.UserIds)),
+		errorCounts:    map[string]int64{},
+		startedAt:      time.Now(),
 	}
 }
 
@@ -238,15 +243,18 @@ func (r *Runner) runUser(ctx context.Context, userId string) {
 
 	reserveStart := time.Now()
 	err = r.client.Reserve(userCtx, userId, r.cfg.Quantity)
-	r.recordReserve(time.Since(reserveStart))
+	reserveDuration := time.Since(reserveStart)
 
 	switch {
 	case err == nil:
 		r.reserved.Add(1)
+		r.recordReserve(reserveDuration)
 	case errors.Is(err, reservationRepo.ErrInsufficientCapacity):
 		r.rejectedCapacity.Add(1)
+		r.recordRejected(reserveDuration)
 	case errors.Is(err, reservationRepo.ErrExceedMaxReserveQuantity):
 		r.rejectedQuota.Add(1)
+		r.recordRejected(reserveDuration)
 	default:
 		r.classify("reserve", err)
 	}
@@ -321,6 +329,12 @@ func (r *Runner) recordReserve(d time.Duration) {
 	r.mu.Unlock()
 }
 
+func (r *Runner) recordRejected(d time.Duration) {
+	r.mu.Lock()
+	r.rejectedSample = append(r.rejectedSample, d)
+	r.mu.Unlock()
+}
+
 func (r *Runner) recordWait(d time.Duration) {
 	r.mu.Lock()
 	r.waitSample = append(r.waitSample, d)
@@ -380,6 +394,7 @@ func (r *Runner) Snapshot(parent context.Context) Snapshot {
 
 	r.mu.Lock()
 	reserve := append([]time.Duration(nil), r.reserveSample...)
+	rejected := append([]time.Duration(nil), r.rejectedSample...)
 	wait := append([]time.Duration(nil), r.waitSample...)
 	s.ErrorCounts = make(map[string]int64, len(r.errorCounts))
 	for k, v := range r.errorCounts {
@@ -390,6 +405,9 @@ func (r *Runner) Snapshot(parent context.Context) Snapshot {
 	s.ReserveP50Ms = percentileMs(reserve, 0.50)
 	s.ReserveP95Ms = percentileMs(reserve, 0.95)
 	s.ReserveP99Ms = percentileMs(reserve, 0.99)
+	s.RejectedP50Ms = percentileMs(rejected, 0.50)
+	s.RejectedP95Ms = percentileMs(rejected, 0.95)
+	s.RejectedP99Ms = percentileMs(rejected, 0.99)
 	s.QueueWaitP50Ms = percentileMs(wait, 0.50)
 	s.QueueWaitP95Ms = percentileMs(wait, 0.95)
 

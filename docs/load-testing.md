@@ -107,6 +107,36 @@ The `oversold` column is the point of the table. It never changes.
 
 ---
 
+## Serial vs. parallel events
+
+A different axis: not one event under more or less admission pressure, but multiple independent events — each with their own capacity, their own row to lock — run one at a time versus all at once.
+
+10 events, gate 10, 2,000 users / 100 seats each. Reserve latency below is the fixed metric — successful reservations and capacity/quota rejections measured separately, not blended (see "A latency lesson" below for why that split matters):
+
+| | serial (one event at a time) | parallel (all 10 at once) |
+|---|---:|---:|
+| total wall clock, all 10 events | 9.9s | 5.8s |
+| avg successful reserve p50 | 1.20ms | 244.93ms |
+| avg rejected (capacity) p50 | 0.97ms | 54.62ms |
+| errors | 0 | 0 |
+| oversold | no (10/10) | no (10/10) |
+
+Ten events share nothing correctness-wise — no row, no lock — so running them at once is real parallelism: the batch finishes 1.7× faster. What they do share is the Postgres connection pool and the CPU underneath both, and that shows up directly in the successful-reserve path: roughly 200× slower per request, because ten processes are now splitting resources sized for one. `oversold` does not move either way, on any of the 20 runs.
+
+*(measured on the same machine as the numbers elsewhere on this page — treat the shape, throughput up, per-request latency down, correctness untouched, as the result, not these particular milliseconds.)*
+
+---
+
+### A latency lesson
+
+The first version of this table reported one blended "reserve p50" per run, and it was wrong in an interesting way. `simulation/engine.go` used to time the *entire* `ReserveEvent` call and record every outcome into the same histogram — including the sold-out short-circuit, which returns in microseconds once an event's `IsBlockEvent` cache flag is set, no transaction, no lock, nothing. Once a 100-seat event fills, roughly 900 of the next 1,000 admitted attempts hit that fast path, not the database. A single histogram fed by ~90% near-instant cache rejections and ~10% real, lock-contended inserts reports a percentile that describes neither cleanly.
+
+This is the same failure mode as "The sold-out cache" post: a fast path silently distorting a number that looks great and means something else. There, it was correctness (an incorrectly-blocked event rejecting everyone at 0ms). Here, it was measurement (a *correctly*-blocked event's fast rejections dragging down a latency number meant to describe row-lock contention). Same root cause, one level removed: a cache that changes an operation's cost without the metric around it knowing.
+
+The fix: `recordReserve` now only fires for successful reservations; a new `recordRejected` captures capacity/quota rejections separately, exposed as its own `RejectedP50/95/99Ms`. Outcomes that are neither (timeouts, cancellations, other errors) record no latency at all, since those durations reflect context-deadline timing, not operation cost.
+
+---
+
 ## The poll storm
 
 The most useful thing the load test found, because it falsified the model the system was tuned against.

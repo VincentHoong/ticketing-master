@@ -90,6 +90,9 @@ export interface Snapshot {
   reserveP50Ms: number;
   reserveP95Ms: number;
   reserveP99Ms: number;
+  rejectedP50Ms: number;
+  rejectedP95Ms: number;
+  rejectedP99Ms: number;
   queueWaitP50Ms: number;
   queueWaitP95Ms: number;
   pollIntervalMs: number;

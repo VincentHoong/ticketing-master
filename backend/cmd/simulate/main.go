@@ -177,8 +177,10 @@ func printReport(s simulation.Snapshot, elapsed time.Duration) {
 		fmt.Println()
 	}
 
-	fmt.Println("reserve latency (db contention)")
+	fmt.Println("reserve latency, successful (db contention)")
 	fmt.Printf("  p50 %.2fms   p95 %.2fms   p99 %.2fms\n", s.ReserveP50Ms, s.ReserveP95Ms, s.ReserveP99Ms)
+	fmt.Println("reserve latency, rejected (capacity/quota)")
+	fmt.Printf("  p50 %.2fms   p95 %.2fms   p99 %.2fms\n", s.RejectedP50Ms, s.RejectedP95Ms, s.RejectedP99Ms)
 	fmt.Printf("queue wait (quantised by %dms poll)\n", s.PollIntervalMs)
 	fmt.Printf("  p50 %.2fms   p95 %.2fms\n", s.QueueWaitP50Ms, s.QueueWaitP95Ms)
 	fmt.Println()

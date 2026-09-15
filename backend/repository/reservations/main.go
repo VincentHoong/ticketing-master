@@ -96,12 +96,13 @@ func (r *ReservationRepository) GetReservationByIdempotencyKey(ctx context.Conte
 
 	if cached != nil {
 		return cached, nil
-	} else if err != nil {
+	}
+	if err != nil && !errors.Is(err, redis.Nil) {
 		logging.FromContext(ctx).Warn("idempotency cache lookup failed, falling back to postgres", "error", err)
 	}
 
 	reservation, err := r.PostgresRepository.GetReservationByIdempotencyKey(ctx, eventId, userId, idempotencyKey)
-	if err != nil {
+	if err != nil && !errors.Is(err, ErrReservationNotFound) {
 		logging.FromContext(ctx).Error("idempotency key lookup failed", "error", err)
 	}
 	return reservation, err
