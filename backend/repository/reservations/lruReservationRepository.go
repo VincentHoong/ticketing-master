@@ -2,19 +2,23 @@ package reservations
 
 import (
 	"context"
+	"time"
 
-	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/hashicorp/golang-lru/v2/expirable"
 )
 
+const lruBlockTTL = 5 * time.Second
+
 type LRUReservationRepository struct {
-	eventFullyBookedLRU *lru.Cache[string, bool]
+	eventFullyBookedLRU *expirable.LRU[string, bool]
 }
 
 func newLRUReservationRepository() (*LRUReservationRepository, error) {
-	eventFullyBookedLRU, err := lru.New[string, bool](128)
-	if err != nil {
-		return nil, err
-	}
+	return newLRUReservationRepositoryWithTTL(lruBlockTTL)
+}
+
+func newLRUReservationRepositoryWithTTL(ttl time.Duration) (*LRUReservationRepository, error) {
+	eventFullyBookedLRU := expirable.NewLRU[string, bool](128, nil, ttl)
 
 	r := &LRUReservationRepository{eventFullyBookedLRU: eventFullyBookedLRU}
 

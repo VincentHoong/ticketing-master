@@ -14,7 +14,7 @@ import (
 var ErrRefreshEventStatusInProgress = errors.New("refresh event status in progress")
 var marginTTL = 5 * time.Second
 var reservationItemTTL = 1 * time.Minute
-var eventBlockedTTL = 5 * time.Minute
+var eventBlockedTTL = 15 * time.Second
 
 type RemoteCacheReservationRepository struct {
 	Rdb *redis.Client

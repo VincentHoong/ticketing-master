@@ -112,11 +112,7 @@ func (r *ReservationRepository) SetReservationByIdempotencyKey(ctx context.Conte
 }
 
 func (r *ReservationRepository) ReserveEvent(ctx context.Context, eventId string, userId string, quantity uint32, idempotencyKey *string, maxReservePerUser uint32) (*ReservationItem, bool, error) {
-	reservationItem, isCapped, err := r.PostgresRepository.ReserveEvent(ctx, eventId, userId, quantity, idempotencyKey)
-	if err != nil {
-		return nil, false, err
-	}
-	return reservationItem, isCapped, nil
+	return r.PostgresRepository.ReserveEvent(ctx, eventId, userId, quantity, idempotencyKey)
 }
 
 func (r *ReservationRepository) GetTotalReserved(ctx context.Context, eventId string) (int64, error) {
@@ -151,7 +147,7 @@ func (r *ReservationRepository) startRefreshEventStatusTicker() {
 			case <-r.stopRefreshEventStatusChan:
 				return
 			case <-ticker.C:
-				tickCtx, tickCancel := context.WithTimeout(logging.WithContext(context.Background(), r.logger), 5*time.Minute)
+				tickCtx, tickCancel := context.WithTimeout(logging.WithContext(context.Background(), r.logger), 30*time.Second)
 				r.RefreshEventStatus(tickCtx)
 				tickCancel()
 			}
