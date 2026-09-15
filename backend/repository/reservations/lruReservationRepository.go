@@ -34,7 +34,8 @@ func (r *LRUReservationRepository) UnblockEvent(ctx context.Context, eventId str
 }
 
 func (r *LRUReservationRepository) IsBlockEvent(ctx context.Context, eventId string) (evicted bool) {
-	return r.eventFullyBookedLRU.Contains(eventId)
+	_, ok := r.eventFullyBookedLRU.Get(eventId)
+	return ok
 }
 
 func (r *LRUReservationRepository) ClearBlockedEvents() {
