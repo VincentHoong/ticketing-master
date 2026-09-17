@@ -2,53 +2,72 @@ name: backend-ci
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
+
 
 defaults:
   run:
     working-directory: backend
 
 jobs:
+  nix-verify:
+    name: Verify Nix build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # v23
+
+    - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # v15
+
+    - name: nix flake check
+      working-directory: .
+      run: |
+        nix flake check
+        git diff --exit-code flake.lock
+
   test:
     name: Build, vet & unit tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: backend/go.mod
+        cache-dependency-path: backend/go.sum
 
-      - name: gofmt check
-        run: |
-          fmt_out=$(gofmt -l .)
-          if [ -n "$fmt_out" ]; then
-            echo "The following files are not gofmt-formatted:"
-            echo "$fmt_out"
-            exit 1
-          fi
+    - name: gofmt check
+      run: |
+        fmt_out=$(gofmt -l .)
+        if [ -n "$fmt_out" ]; then
+          echo "The following files are not gofmt-formatted:"
+          echo "$fmt_out"
+          exit 1
+        fi
 
-      - name: go vet
-        run: go vet ./...
+    - name: go vet
+      run: go vet ./...
 
-      - name: go build
-        run: go build ./...
+    - name: go build
+      run: go build ./...
 
-      - name: go test
-        run: go test ./...
+    - name: go test
+      run: go test ./...
 
   integration:
     name: Integration & race tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: backend/go.mod
-          cache-dependency-path: backend/go.sum
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: backend/go.mod
+        cache-dependency-path: backend/go.sum
 
-      - name: go test (integration, -race)
-        run: go test -tags=integration -race -timeout 5m ./integrationtest/...
+    - name: go test (integration, -race)
+      run: go test -tags=integration -race -timeout 5m ./integrationtest/...

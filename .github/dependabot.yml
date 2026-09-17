@@ -1,0 +1,12 @@
+version: 2
+updates:
+# Keep pinned Action SHAs (and any floating version tags) current.
+- package-ecosystem: "github-actions"
+  directory: "/"
+  schedule:
+    interval: "weekly"
+# Keep backend Go module dependencies (go.mod/go.sum) current.
+- package-ecosystem: "gomod"
+  directory: "/backend"
+  schedule:
+    interval: "weekly"
