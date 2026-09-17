@@ -20,11 +20,11 @@ func (h *VirtualQueueHandler) getTotalVirtualQueueHandler(requestTimeout time.Du
 
 		total, err := h.VirtualQueueService.GetTotalVirtualQueue(r.Context(), eventId)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
 
-		utils.WriteJSONResponse(w, http.StatusOK, &GetTotalVirtualQueueResponse{
+		utils.WriteJSONResponse(w, r, http.StatusOK, &GetTotalVirtualQueueResponse{
 			Total: total,
 		})
 	})

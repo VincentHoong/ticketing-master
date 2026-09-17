@@ -19,6 +19,6 @@ func (h *Health) getHealth() {
 			status = http.StatusServiceUnavailable
 		}
 
-		utils.WriteJSONResponse(w, status, healthResponse)
+		utils.WriteJSONResponse(w, r, status, healthResponse)
 	})
 }

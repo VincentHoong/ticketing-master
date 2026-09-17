@@ -22,13 +22,13 @@ func (h *UserHandler) loginHandler(requestTimeout time.Duration) {
 		var loginReq = &LoginRequestBody{}
 		err := utils.DecodeRequestBody(w, r, loginReq)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
 
 		userDto, err := h.UserService.GetUser(r.Context(), loginReq.Id)
 		if err != nil {
-			utils.WriteJSONResponse(w, http.StatusBadRequest, nil)
+			utils.WriteJSONResponse(w, r, http.StatusBadRequest, nil)
 			return
 		}
 		jwtClaims := &userClaims{
@@ -42,10 +42,10 @@ func (h *UserHandler) loginHandler(requestTimeout time.Duration) {
 		tokenString, err := token.SignedString([]byte(h.JwtSecret))
 
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
-		utils.WriteJSONResponse(w, http.StatusOK, &LoginResponse{
+		utils.WriteJSONResponse(w, r, http.StatusOK, &LoginResponse{
 			Token: tokenString,
 		})
 	})

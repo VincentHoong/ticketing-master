@@ -52,11 +52,11 @@ func (h *AdminHandler) mintUsersHandler(requestTimeout time.Duration) {
 	h.Router.With(middleware.Timeout(requestTimeout)).Post("/admin/mint/users", func(w http.ResponseWriter, r *http.Request) {
 		var req = &MintUsersRequest{}
 		if err := utils.DecodeRequestBody(w, r, req); err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
 		if req.Count == 0 || req.Count > maxMintUsers {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("count must be between 1 and %d", maxMintUsers))
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, fmt.Errorf("count must be between 1 and %d", maxMintUsers))
 			return
 		}
 
@@ -75,12 +75,12 @@ func (h *AdminHandler) mintUsersHandler(requestTimeout time.Duration) {
 
 		userIds, err := h.Repositories.UserRepository.CreateUsers(r.Context(), newUsers)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+			utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 			logging.FromContext(r.Context()).Error("mint users failed", "error", err)
 			return
 		}
 
-		utils.WriteJSONResponse(w, http.StatusCreated, &MintUsersResponse{
+		utils.WriteJSONResponse(w, r, http.StatusCreated, &MintUsersResponse{
 			Requested: req.Count,
 			Created:   len(userIds),
 			UserIds:   userIds,
@@ -92,11 +92,11 @@ func (h *AdminHandler) mintEventsHandler(requestTimeout time.Duration) {
 	h.Router.With(middleware.Timeout(requestTimeout)).Post("/admin/mint/events", func(w http.ResponseWriter, r *http.Request) {
 		var req = &MintEventsRequest{}
 		if err := utils.DecodeRequestBody(w, r, req); err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
 		if req.Count == 0 || req.Count > maxMintEvents {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("count must be between 1 and %d", maxMintEvents))
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, fmt.Errorf("count must be between 1 and %d", maxMintEvents))
 			return
 		}
 
@@ -125,7 +125,7 @@ func (h *AdminHandler) mintEventsHandler(requestTimeout time.Duration) {
 
 		created, err := h.Repositories.EventRepository.CreateEvents(r.Context(), newEvents)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+			utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 			logging.FromContext(r.Context()).Error("mint events failed", "error", err)
 			return
 		}
@@ -133,7 +133,7 @@ func (h *AdminHandler) mintEventsHandler(requestTimeout time.Duration) {
 			created = []eventRepo.EventItem{}
 		}
 
-		utils.WriteJSONResponse(w, http.StatusCreated, &MintEventsResponse{
+		utils.WriteJSONResponse(w, r, http.StatusCreated, &MintEventsResponse{
 			Requested: req.Count,
 			Created:   len(created),
 			Events:    created,

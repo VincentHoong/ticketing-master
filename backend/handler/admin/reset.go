@@ -45,14 +45,14 @@ func (h *AdminHandler) resetHandler(requestTimeout time.Duration) {
 	h.Router.With(middleware.Timeout(requestTimeout)).Post("/admin/reset", func(w http.ResponseWriter, r *http.Request) {
 		var req = &ResetRequest{}
 		if err := utils.DecodeRequestBody(w, r, req); err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
 		if req.Scope == "" {
 			req.Scope = ScopeReservations
 		}
 		if !req.Scope.valid() {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("scope must be %q, %q or %q", ScopeReservations, ScopeUsers, ScopeAll))
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, fmt.Errorf("scope must be %q, %q or %q", ScopeReservations, ScopeUsers, ScopeAll))
 			return
 		}
 
@@ -60,7 +60,7 @@ func (h *AdminHandler) resetHandler(requestTimeout time.Duration) {
 		// numbers it is measuring and can crash it mid-transaction. The UI disables this
 		// button while a run is active, but curl doesn't know that.
 		if h.Simulations.HasAnyActiveRun() {
-			utils.WriteErrorResponse(w, http.StatusConflict, simulation.ErrRunInProgress)
+			utils.WriteErrorResponse(w, r, http.StatusConflict, simulation.ErrRunInProgress)
 			return
 		}
 
@@ -68,18 +68,18 @@ func (h *AdminHandler) resetHandler(requestTimeout time.Duration) {
 		if err != nil {
 			switch {
 			case errors.Is(err, context.Canceled):
-				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			case errors.Is(err, context.DeadlineExceeded):
-				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
+				utils.WriteErrorResponse(w, r, http.StatusGatewayTimeout, err)
 				logging.FromContext(r.Context()).Warn("request timed out", "error", err)
 			default:
-				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 				logging.FromContext(r.Context()).Error("reset failed", "error", err)
 			}
 			return
 		}
 
-		utils.WriteJSONResponse(w, http.StatusOK, response)
+		utils.WriteJSONResponse(w, r, http.StatusOK, response)
 	})
 }
 

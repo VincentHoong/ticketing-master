@@ -18,7 +18,7 @@ func (h *ReservationHandler) releaseReservationHandler(requestTimeout time.Durat
 		id := chi.URLParam(r, "id")
 		userDto, ok := appmiddleware.UserFromContext[*users.UserDto](r)
 		if !ok {
-			utils.WriteJSONResponse(w, http.StatusBadRequest, nil)
+			utils.WriteJSONResponse(w, r, http.StatusBadRequest, nil)
 			return
 		}
 
@@ -27,9 +27,9 @@ func (h *ReservationHandler) releaseReservationHandler(requestTimeout time.Durat
 			ReservationId: id,
 		})
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
-		utils.WriteJSONResponse(w, http.StatusCreated, nil)
+		utils.WriteJSONResponse(w, r, http.StatusCreated, nil)
 	})
 }

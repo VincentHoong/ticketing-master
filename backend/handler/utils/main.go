@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"ticketing-master/logging"
 )
 
 type errorResponse struct {
@@ -19,26 +20,32 @@ func DecodeRequestBody[T any](w http.ResponseWriter, r *http.Request, body *T) e
 	return nil
 }
 
-func WriteErrorResponse(w http.ResponseWriter, status int, err error) {
+func WriteErrorResponse(w http.ResponseWriter, r *http.Request, status int, err error) {
 	encoded, marshalErr := json.Marshal(&errorResponse{
 		Error: err.Error(),
 	})
 	if marshalErr != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(`{"error":"internal server error"}`))
+		bytesWritten, err := w.Write([]byte(`{"error":"internal server error"}`))
+		if err != nil {
+			logging.FromContext(r.Context()).Error("Failed to return failed error response", "bytesWritten", bytesWritten, "error", err)
+		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	w.Write(encoded)
+	bytesWritten, err := w.Write(encoded)
+	if err != nil {
+		logging.FromContext(r.Context()).Error("Failed to return error response", "bytesWritten", bytesWritten, "error", err)
+	}
 }
 
-func WriteJSONResponse(w http.ResponseWriter, status int, data any) {
+func WriteJSONResponse(w http.ResponseWriter, r *http.Request, status int, data any) {
 	encoded, err := json.Marshal(data)
 	if err != nil {
-		WriteErrorResponse(w, http.StatusBadRequest, err)
+		WriteErrorResponse(w, r, http.StatusBadRequest, err)
 		return
 	}
 
@@ -46,6 +53,9 @@ func WriteJSONResponse(w http.ResponseWriter, status int, data any) {
 	w.WriteHeader(status)
 
 	if data != nil {
-		w.Write(encoded)
+		bytesWritten, err := w.Write(encoded)
+		if err != nil {
+			logging.FromContext(r.Context()).Error("Failed to return json response", "bytesWritten", bytesWritten, "error", err)
+		}
 	}
 }

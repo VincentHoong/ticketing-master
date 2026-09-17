@@ -19,7 +19,7 @@ func (h *EventHandler) listEventsHandler(requestTimeout time.Duration) {
 		if raw := r.URL.Query().Get("limit"); raw != "" {
 			parsed, err := strconv.ParseUint(raw, 10, 64)
 			if err != nil {
-				utils.WriteErrorResponse(w, http.StatusBadRequest, errors.New("limit must be a positive integer"))
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, errors.New("limit must be a positive integer"))
 				return
 			}
 			limit = parsed
@@ -29,12 +29,12 @@ func (h *EventHandler) listEventsHandler(requestTimeout time.Duration) {
 		if err != nil {
 			switch {
 			case errors.Is(err, context.Canceled):
-				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			case errors.Is(err, context.DeadlineExceeded):
-				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
+				utils.WriteErrorResponse(w, r, http.StatusGatewayTimeout, err)
 				logging.FromContext(r.Context()).Warn("request timed out", "error", err)
 			default:
-				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 				logging.FromContext(r.Context()).Error("unexpected error", "error", err)
 			}
 			return
@@ -46,6 +46,6 @@ func (h *EventHandler) listEventsHandler(requestTimeout time.Duration) {
 			eventDtos = append(eventDtos, eventDto.toDto(&eventItems[i]))
 		}
 
-		utils.WriteJSONResponse(w, http.StatusOK, eventDtos)
+		utils.WriteJSONResponse(w, r, http.StatusOK, eventDtos)
 	})
 }

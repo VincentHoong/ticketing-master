@@ -14,9 +14,9 @@ func (h *UserHandler) meHandler(requestTimeout time.Duration) {
 	h.Router.With(middleware.Timeout(requestTimeout), appmiddleware.RequireAuth(h)).Get("/users/me", func(w http.ResponseWriter, r *http.Request) {
 		userDto, err := appmiddleware.UserFromContext[*UserDto](r)
 		if !err {
-			utils.WriteJSONResponse(w, http.StatusBadRequest, nil)
+			utils.WriteJSONResponse(w, r, http.StatusBadRequest, nil)
 			return
 		}
-		utils.WriteJSONResponse(w, http.StatusOK, userDto)
+		utils.WriteJSONResponse(w, r, http.StatusOK, userDto)
 	})
 }

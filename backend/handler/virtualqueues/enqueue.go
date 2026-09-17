@@ -31,14 +31,14 @@ func (h *VirtualQueueHandler) enqueueHandler(requestTimeout time.Duration) {
 	h.Router.With(middleware.Timeout(requestTimeout), appmiddleware.RequireAuth(h.UserHandler)).Post("/virtual-queues/enqueue", func(w http.ResponseWriter, r *http.Request) {
 		userDto, ok := appmiddleware.UserFromContext[*users.UserDto](r)
 		if !ok {
-			utils.WriteJSONResponse(w, http.StatusBadRequest, nil)
+			utils.WriteJSONResponse(w, r, http.StatusBadRequest, nil)
 			return
 		}
 
 		var enqueueReq = &EnqueueRequestBody{}
 		err := utils.DecodeRequestBody(w, r, enqueueReq)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
 
@@ -46,22 +46,22 @@ func (h *VirtualQueueHandler) enqueueHandler(requestTimeout time.Duration) {
 		if err != nil {
 			switch {
 			case errors.Is(err, virtualqueues.ErrVirtualQueueExist):
-				utils.WriteErrorResponse(w, http.StatusConflict, err)
+				utils.WriteErrorResponse(w, r, http.StatusConflict, err)
 			case errors.Is(err, virtualqueues.ErrMissingWhitelistKey):
-				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			default:
-				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			}
 			return
 		}
 		if whitelistTTL > 0 {
-			utils.WriteJSONResponse(w, http.StatusCreated, &EnqueueResponse{
+			utils.WriteJSONResponse(w, r, http.StatusCreated, &EnqueueResponse{
 				Status: StatusWhitelisted,
 			})
 			return
 		}
 
-		utils.WriteJSONResponse(w, http.StatusCreated, &EnqueueResponse{
+		utils.WriteJSONResponse(w, r, http.StatusCreated, &EnqueueResponse{
 			Status: StatusInQueue,
 		})
 	})

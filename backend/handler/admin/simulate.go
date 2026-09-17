@@ -49,15 +49,15 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 	h.Router.With(middleware.Timeout(requestTimeout)).Post("/admin/simulate", func(w http.ResponseWriter, r *http.Request) {
 		var req = &SimulateRequest{}
 		if err := utils.DecodeRequestBody(w, r, req); err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
 		if req.EventId == "" {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, errors.New("eventId is required"))
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, errors.New("eventId is required"))
 			return
 		}
 		if req.Users <= 0 || req.Users > maxSimulatedUsers {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("users must be between 1 and %d", maxSimulatedUsers))
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, fmt.Errorf("users must be between 1 and %d", maxSimulatedUsers))
 			return
 		}
 
@@ -66,29 +66,29 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 			transport = simulation.TransportInProcess
 		}
 		if transport != simulation.TransportInProcess && transport != simulation.TransportHTTP {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("transport must be %q or %q", simulation.TransportInProcess, simulation.TransportHTTP))
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, fmt.Errorf("transport must be %q or %q", simulation.TransportInProcess, simulation.TransportHTTP))
 			return
 		}
 		if transport == simulation.TransportHTTP && req.Users > maxHTTPSimulatedUsers {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, fmt.Errorf("http transport supports at most %d users, got %d", maxHTTPSimulatedUsers, req.Users))
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, fmt.Errorf("http transport supports at most %d users, got %d", maxHTTPSimulatedUsers, req.Users))
 			return
 		}
 
 		// Reject before touching anything: the capacity update, the truncate and the
 		// Redis flush below would otherwise destroy the state of the run already in flight.
 		if h.Simulations.HasActiveRun(req.EventId) {
-			utils.WriteErrorResponse(w, http.StatusConflict, simulation.ErrRunInProgress)
+			utils.WriteErrorResponse(w, r, http.StatusConflict, simulation.ErrRunInProgress)
 			return
 		}
 
 		if req.Capacity > 0 {
 			if _, err := h.Repositories.DbPool.Exec(r.Context(),
 				`UPDATE events SET capacity = $1 WHERE id = $2`, req.Capacity, req.EventId); err != nil {
-				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 				return
 			}
 			if err := h.Repositories.EventRepository.InvalidateCache(r.Context(), req.EventId); err != nil {
-				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 				return
 			}
 		}
@@ -96,11 +96,11 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 		if req.Reset {
 			if _, err := h.Repositories.DbPool.Exec(r.Context(),
 				`DELETE FROM reservations WHERE event_id = $1`, req.EventId); err != nil {
-				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 				return
 			}
 			if err := h.Repositories.Rdb.FlushDB(r.Context()).Err(); err != nil {
-				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 				return
 			}
 			// The sold-out markers live in this process, so clearing the rows without
@@ -116,7 +116,7 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 
 		userIds, err := h.mintSimUsers(r, req.Users)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+			utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 			logging.FromContext(r.Context()).Error("simulate: mint users failed", "error", err)
 			return
 		}
@@ -124,7 +124,7 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 		var tokens map[string]string
 		if transport == simulation.TransportHTTP {
 			if tokens, err = h.mintTokens(userIds); err != nil {
-				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 				return
 			}
 		}
@@ -143,14 +143,14 @@ func (h *AdminHandler) simulateHandler(requestTimeout time.Duration) {
 		})
 		if err != nil {
 			if errors.Is(err, simulation.ErrRunInProgress) {
-				utils.WriteErrorResponse(w, http.StatusConflict, err)
+				utils.WriteErrorResponse(w, r, http.StatusConflict, err)
 				return
 			}
-			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+			utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 			return
 		}
 
-		utils.WriteJSONResponse(w, http.StatusAccepted, &SimulateResponse{
+		utils.WriteJSONResponse(w, r, http.StatusAccepted, &SimulateResponse{
 			RunId:   run.Id,
 			EventId: run.EventId,
 			Users:   len(userIds),
@@ -162,22 +162,22 @@ func (h *AdminHandler) simulateSnapshotHandler(requestTimeout time.Duration) {
 	h.Router.With(middleware.Timeout(requestTimeout)).Get("/admin/simulate/{runId}", func(w http.ResponseWriter, r *http.Request) {
 		run, err := h.Simulations.Get(chi.URLParam(r, "runId"))
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusNotFound, err)
+			utils.WriteErrorResponse(w, r, http.StatusNotFound, err)
 			return
 		}
 
-		utils.WriteJSONResponse(w, http.StatusOK, run.Runner.Snapshot(r.Context()))
+		utils.WriteJSONResponse(w, r, http.StatusOK, run.Runner.Snapshot(r.Context()))
 	})
 }
 
 func (h *AdminHandler) simulateCancelHandler(requestTimeout time.Duration) {
 	h.Router.With(middleware.Timeout(requestTimeout)).Post("/admin/simulate/{runId}/cancel", func(w http.ResponseWriter, r *http.Request) {
 		if err := h.Simulations.Cancel(chi.URLParam(r, "runId")); err != nil {
-			utils.WriteErrorResponse(w, http.StatusNotFound, err)
+			utils.WriteErrorResponse(w, r, http.StatusNotFound, err)
 			return
 		}
 
-		utils.WriteJSONResponse(w, http.StatusAccepted, nil)
+		utils.WriteJSONResponse(w, r, http.StatusAccepted, nil)
 	})
 }
 
@@ -185,18 +185,18 @@ func (h *AdminHandler) simulateStreamHandler() {
 	h.Router.Get("/admin/simulate/{runId}/stream", func(w http.ResponseWriter, r *http.Request) {
 		run, err := h.Simulations.Get(chi.URLParam(r, "runId"))
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusNotFound, err)
+			utils.WriteErrorResponse(w, r, http.StatusNotFound, err)
 			return
 		}
 
 		flusher, ok := w.(http.Flusher)
 		if !ok {
-			utils.WriteErrorResponse(w, http.StatusInternalServerError, errors.New("streaming unsupported"))
+			utils.WriteErrorResponse(w, r, http.StatusInternalServerError, errors.New("streaming unsupported"))
 			return
 		}
 		rc := http.NewResponseController(w)
 		if err := rc.SetWriteDeadline(time.Time{}); err != nil {
-			utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+			utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 			return
 		}
 

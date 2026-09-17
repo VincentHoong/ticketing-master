@@ -28,19 +28,19 @@ func (h *ReservationHandler) reserveEventHandler(requestTimeout time.Duration) {
 		eventId := chi.URLParam(r, "id")
 		user, ok := appmiddleware.UserFromContext[*users.UserDto](r)
 		if !ok {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, errors.New("unable to identify user"))
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, errors.New("unable to identify user"))
 			return
 		}
 
 		var reserveEventReq = &ReserveEventRequestBody{}
 		err := utils.DecodeRequestBody(w, r, reserveEventReq)
 		if err != nil {
-			utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+			utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			return
 		}
 
 		if reserveEventReq.Quantity < 1 {
-			utils.WriteJSONResponse(w, http.StatusBadRequest, errors.New("quantity cannot be less than 0"))
+			utils.WriteJSONResponse(w, r, http.StatusBadRequest, errors.New("quantity cannot be less than 0"))
 			return
 		}
 
@@ -57,25 +57,25 @@ func (h *ReservationHandler) reserveEventHandler(requestTimeout time.Duration) {
 		if err != nil {
 			switch {
 			case errors.Is(err, reservationRepo.ErrInsufficientCapacity), errors.Is(err, reservationRepo.ErrExceedMaxReserveQuantity):
-				utils.WriteErrorResponse(w, http.StatusConflict, err)
+				utils.WriteErrorResponse(w, r, http.StatusConflict, err)
 			case errors.Is(err, eventRepo.ErrEventNotFound):
-				utils.WriteErrorResponse(w, http.StatusNotFound, errors.New("event not found"))
+				utils.WriteErrorResponse(w, r, http.StatusNotFound, errors.New("event not found"))
 			case errors.Is(err, reservations.ErrQueueInProgress):
-				utils.WriteErrorResponse(w, http.StatusBadRequest, errors.New("not currently whitelisted for reservation"))
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, errors.New("not currently whitelisted for reservation"))
 			case errors.Is(err, reservations.ErrIdempotencyKeyReused):
-				utils.WriteErrorResponse(w, http.StatusForbidden, err)
+				utils.WriteErrorResponse(w, r, http.StatusForbidden, err)
 			case errors.Is(err, context.Canceled):
-				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			case errors.Is(err, context.DeadlineExceeded):
-				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
+				utils.WriteErrorResponse(w, r, http.StatusGatewayTimeout, err)
 				logging.FromContext(r.Context()).Warn("request timed out", "error", err)
 			default:
-				utils.WriteErrorResponse(w, http.StatusInternalServerError, err)
+				utils.WriteErrorResponse(w, r, http.StatusInternalServerError, err)
 				logging.FromContext(r.Context()).Error("unexpected error", "error", err)
 			}
 			return
 		}
 
-		utils.WriteJSONResponse(w, http.StatusOK, reservationItem)
+		utils.WriteJSONResponse(w, r, http.StatusOK, reservationItem)
 	})
 }

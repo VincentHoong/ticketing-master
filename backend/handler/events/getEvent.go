@@ -21,20 +21,20 @@ func (h *EventHandler) getEventHandler(requestTimeout time.Duration) {
 		if err != nil {
 			switch {
 			case errors.Is(err, events.ErrEventNotFound):
-				utils.WriteErrorResponse(w, http.StatusNotFound, err)
+				utils.WriteErrorResponse(w, r, http.StatusNotFound, err)
 			case errors.Is(err, context.Canceled):
-				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			case errors.Is(err, context.DeadlineExceeded):
-				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
+				utils.WriteErrorResponse(w, r, http.StatusGatewayTimeout, err)
 				logging.FromContext(r.Context()).Warn("request timed out", "error", err)
 			default:
-				utils.WriteJSONResponse(w, http.StatusInternalServerError, nil)
+				utils.WriteJSONResponse(w, r, http.StatusInternalServerError, nil)
 				logging.FromContext(r.Context()).Error("unexpected error", "error", err)
 			}
 			return
 		}
 
 		eventDto := &EventDto{}
-		utils.WriteJSONResponse(w, http.StatusOK, eventDto.toDto(eventItem))
+		utils.WriteJSONResponse(w, r, http.StatusOK, eventDto.toDto(eventItem))
 	})
 }

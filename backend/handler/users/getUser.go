@@ -21,20 +21,20 @@ func (h *UserHandler) getUserHandler(requestTimeout time.Duration) {
 		if err != nil {
 			switch {
 			case errors.Is(err, users.ErrUserNotFound):
-				utils.WriteJSONResponse(w, http.StatusNotFound, nil)
+				utils.WriteJSONResponse(w, r, http.StatusNotFound, nil)
 			case errors.Is(err, context.Canceled):
-				utils.WriteErrorResponse(w, http.StatusBadRequest, err)
+				utils.WriteErrorResponse(w, r, http.StatusBadRequest, err)
 			case errors.Is(err, context.DeadlineExceeded):
-				utils.WriteErrorResponse(w, http.StatusGatewayTimeout, err)
+				utils.WriteErrorResponse(w, r, http.StatusGatewayTimeout, err)
 				logging.FromContext(r.Context()).Warn("request timed out", "error", err)
 			default:
-				utils.WriteJSONResponse(w, http.StatusInternalServerError, nil)
+				utils.WriteJSONResponse(w, r, http.StatusInternalServerError, nil)
 				logging.FromContext(r.Context()).Error("unexpected error", "error", err)
 			}
 			return
 		}
 
 		userDto := &UserDto{}
-		utils.WriteJSONResponse(w, http.StatusOK, userDto.toDto(userItem))
+		utils.WriteJSONResponse(w, r, http.StatusOK, userDto.toDto(userItem))
 	})
 }
