@@ -77,7 +77,7 @@ func (r *PostgresReservationRepository) ReserveEvent(ctx context.Context, eventI
 	if err != nil {
 		return nil, false, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var dbCapacity uint32
 	var dbMaxReservePerUser uint32
@@ -176,7 +176,7 @@ func (r *PostgresReservationRepository) UpdateReservation(ctx context.Context, u
 	if err != nil {
 		return "", err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var eventId string
 	err = tx.QueryRow(ctx, fmt.Sprintf(`

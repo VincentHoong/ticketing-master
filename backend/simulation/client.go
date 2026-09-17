@@ -145,7 +145,7 @@ func (c *httpClient) do(ctx context.Context, method string, path string, userId 
 	if err != nil {
 		return 0, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 
 	raw, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -156,7 +156,7 @@ func (c *httpClient) do(ctx context.Context, method string, path string, userId 
 		var errBody struct {
 			Error string `json:"error"`
 		}
-		json.Unmarshal(raw, &errBody)
+		_ = json.Unmarshal(raw, &errBody)
 		return res.StatusCode, &httpError{Status: res.StatusCode, Message: errBody.Error}
 	}
 

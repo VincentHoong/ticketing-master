@@ -90,7 +90,7 @@ func (h *AdminHandler) reset(ctx context.Context, scope ResetScope) (*ResetRespo
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM reservations`).Scan(&response.ReservationsCount); err != nil {
 		return nil, err

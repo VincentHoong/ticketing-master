@@ -47,6 +47,7 @@ const (
 	createUserTimeout = 5 * time.Second
 	loginTimeout      = 5 * time.Second
 	meTimeout         = 5 * time.Second
+	getUserTimeout    = 5 * time.Second
 )
 
 func NewHandler(router *chi.Mux, userService users.IUserService, jwtSecret string) *UserHandler {
@@ -55,6 +56,7 @@ func NewHandler(router *chi.Mux, userService users.IUserService, jwtSecret strin
 	h.createUserHandler(createUserTimeout)
 	h.loginHandler(loginTimeout)
 	h.meHandler(meTimeout)
+	h.getUserHandler(getUserTimeout)
 
 	return &h
 }

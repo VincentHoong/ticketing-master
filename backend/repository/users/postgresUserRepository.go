@@ -57,7 +57,7 @@ func (r *PostgresUserRepository) CreateUsers(ctx context.Context, users []NewUse
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `
 		CREATE TEMP TABLE minted_users (

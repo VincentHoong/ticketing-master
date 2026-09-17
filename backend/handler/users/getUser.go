@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"ticketing-master/handler/utils"
 	"ticketing-master/logging"
+	appmiddleware "ticketing-master/middleware"
 	"ticketing-master/repository/users"
 	"time"
 
@@ -14,7 +15,7 @@ import (
 )
 
 func (h *UserHandler) getUserHandler(requestTimeout time.Duration) {
-	h.Router.With(middleware.Timeout(requestTimeout)).Get("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
+	h.Router.With(middleware.Timeout(requestTimeout), appmiddleware.RequireAuth(h)).Get("/users/{id}", func(w http.ResponseWriter, r *http.Request) {
 		id := chi.URLParam(r, "id")
 
 		userItem, err := h.UserService.GetUser(r.Context(), id)

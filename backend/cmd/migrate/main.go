@@ -65,14 +65,14 @@ func run(args []string) error {
 	command := args[0]
 	switch command {
 	case "up":
-		if n, ok, err := optionalStep(args); err != nil {
+		n, ok, err := optionalStep(args)
+		if err != nil {
 			return err
-		} else if ok {
-			err = m.Steps(n)
-		} else {
-			err = m.Up()
 		}
-		return reportResult(err, "up")
+		if ok {
+			return reportResult(m.Steps(n), "up")
+		}
+		return reportResult(m.Up(), "up")
 	case "down":
 		n, ok, err := optionalStep(args)
 		if err != nil {

@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"errors"
+	"log/slog"
 	"testing"
 
 	"ticketing-master/repository/reservations"
@@ -17,7 +18,7 @@ func TestService_HappyPath_EnqueueReserveConfirm(t *testing.T) {
 	ctx := newTestCtx(t)
 
 	reservationSvc := svcreservations.NewReservationService(repos)
-	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos)
+	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos, slog.Default())
 
 	userId := createTestUser(t, repos)
 	event := createTestEvent(t, repos, 5, 5)
@@ -73,7 +74,7 @@ func TestService_Unhappy_ReserveOnBlockedEventReleasesQueueSlot(t *testing.T) {
 	ctx := newTestCtx(t)
 
 	reservationSvc := svcreservations.NewReservationService(repos)
-	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos)
+	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos, slog.Default())
 
 	event := createTestEvent(t, repos, 1, 1)
 
@@ -122,7 +123,7 @@ func TestService_Unhappy_IdempotencyKeyReuseWithDifferentQuantity(t *testing.T) 
 	ctx := newTestCtx(t)
 
 	reservationSvc := svcreservations.NewReservationService(repos)
-	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos)
+	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos, slog.Default())
 
 	userId := createTestUser(t, repos)
 	event := createTestEvent(t, repos, 10, 10)

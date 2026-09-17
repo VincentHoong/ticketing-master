@@ -149,7 +149,9 @@ func (r *ReservationRepository) startRefreshEventStatusTicker() {
 				return
 			case <-ticker.C:
 				tickCtx, tickCancel := context.WithTimeout(logging.WithContext(context.Background(), r.logger), 30*time.Second)
-				r.RefreshEventStatus(tickCtx)
+				if err := r.RefreshEventStatus(tickCtx); err != nil {
+					r.logger.Error("failed to refresh event status", "error", err)
+				}
 				tickCancel()
 			}
 		}
@@ -174,7 +176,9 @@ func (r *ReservationRepository) RefreshEventStatus(ctx context.Context) error {
 	defer func() {
 		releaseCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 		defer cancel()
-		r.RemoteCacheRepository.ReleaseRefreshEventStatus(releaseCtx, token)
+		if err := r.RemoteCacheRepository.ReleaseRefreshEventStatus(releaseCtx, token); err != nil {
+			r.logger.Error("failed to release refresh event status lock", "error", err)
+		}
 	}()
 
 	eventIds, expired, err := r.PostgresRepository.RefreshEventStatus(ctx)

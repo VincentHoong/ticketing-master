@@ -33,7 +33,7 @@ func run() error {
 	}
 	defer repositories.Close()
 
-	services := service.NewServices(repositories)
+	services := service.NewServices(repositories, logger)
 
 	r := handler.NewHandler(cfg, services, repositories, logger)
 

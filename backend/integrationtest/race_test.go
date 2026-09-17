@@ -4,6 +4,7 @@ package integrationtest
 
 import (
 	"errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -26,7 +27,7 @@ func TestRace_ReservationCapacityEnforcedUnderConcurrency(t *testing.T) {
 	ctx := newTestCtx(t)
 
 	reservationSvc := svcreservations.NewReservationService(repos)
-	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos)
+	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos, slog.Default())
 
 	event := createTestEvent(t, repos, capacity, 1)
 
@@ -127,7 +128,7 @@ func TestRace_ConcurrentReserveAndReleaseNoDoubleBooking(t *testing.T) {
 	ctx := newTestCtx(t)
 
 	reservationSvc := svcreservations.NewReservationService(repos)
-	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos)
+	queueSvc := svcvirtualqueues.NewVirtualQueueService(repos, slog.Default())
 
 	event := createTestEvent(t, repos, 1, 1)
 

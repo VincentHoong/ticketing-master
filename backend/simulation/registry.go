@@ -68,7 +68,7 @@ func (reg *Registry) Start(cfg Config) (*Run, error) {
 
 	go func() {
 		defer cancel()
-		run.Runner.Run(ctx)
+		_ = run.Runner.Run(ctx)
 		time.AfterFunc(runRetention, func() { reg.forget(run.Id, cfg.EventId) })
 	}()
 

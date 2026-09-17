@@ -50,7 +50,7 @@ func (e *PostgresEventRepository) CreateEvents(ctx context.Context, events []New
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	if _, err := tx.Exec(ctx, `
 		CREATE TEMP TABLE minted_events (

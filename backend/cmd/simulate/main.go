@@ -46,13 +46,14 @@ func run() error {
 	}
 
 	ctx := context.Background()
-	repositories, err := repository.NewRepositories(ctx, cfg, logging.New(cfg.LogLevel))
+	logger := logging.New(cfg.LogLevel)
+	repositories, err := repository.NewRepositories(ctx, cfg, logger)
 	if err != nil {
 		return err
 	}
 	defer repositories.Close()
 
-	services := service.NewServices(repositories)
+	services := service.NewServices(repositories, logger)
 
 	if *capacity > 0 {
 		if _, err := repositories.DbPool.Exec(ctx,

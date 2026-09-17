@@ -2,12 +2,14 @@ package virtualqueues
 
 import (
 	"context"
+	"log/slog"
 	"ticketing-master/repository"
 	"time"
 )
 
 type VirtualQueueService struct {
 	Repositories *repository.Repositories
+	logger       *slog.Logger
 }
 
 type QueueStatus struct {
@@ -23,9 +25,10 @@ type IVirtualQueueService interface {
 	GetTotalVirtualQueue(ctx context.Context, eventId string) (int64, error)
 }
 
-func NewVirtualQueueService(repositories *repository.Repositories) IVirtualQueueService {
+func NewVirtualQueueService(repositories *repository.Repositories, logger *slog.Logger) IVirtualQueueService {
 	return &VirtualQueueService{
 		Repositories: repositories,
+		logger:       logger,
 	}
 }
 
@@ -78,7 +81,9 @@ func (s *VirtualQueueService) Dequeue(ctx context.Context, eventId string, userI
 	}
 
 	if releasedSlot {
-		s.Repositories.VirtualQueueRepository.TryWhitelistEventQueue(ctx, eventId, 1)
+		if _, err := s.Repositories.VirtualQueueRepository.TryWhitelistEventQueue(ctx, eventId, 1); err != nil {
+			s.logger.Error("failed to whitelist next queued user", "error", err, "eventId", eventId)
+		}
 	}
 
 	return nil

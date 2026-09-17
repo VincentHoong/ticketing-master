@@ -189,7 +189,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		defer func() {
 			clearCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			r.repositories.VirtualQueueRepository.ClearEventMaxConcurrent(clearCtx, r.cfg.EventId)
+			_ = r.repositories.VirtualQueueRepository.ClearEventMaxConcurrent(clearCtx, r.cfg.EventId)
 		}()
 	}
 

@@ -1,6 +1,7 @@
 package service
 
 import (
+	"log/slog"
 	"ticketing-master/repository"
 	"ticketing-master/service/events"
 	"ticketing-master/service/health"
@@ -17,12 +18,12 @@ type Services struct {
 	VirtualQueueService virtualqueues.IVirtualQueueService
 }
 
-func NewServices(repositories *repository.Repositories) *Services {
+func NewServices(repositories *repository.Repositories, logger *slog.Logger) *Services {
 	return &Services{
 		EventService:        events.NewEventService(repositories),
 		ReservationService:  reservations.NewReservationService(repositories),
 		UserService:         users.NewUserService(repositories),
 		HealthService:       health.NewHealthService(repositories),
-		VirtualQueueService: virtualqueues.NewVirtualQueueService(repositories),
+		VirtualQueueService: virtualqueues.NewVirtualQueueService(repositories, logger),
 	}
 }
